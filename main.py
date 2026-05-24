@@ -75,7 +75,27 @@ def search(query: str):
 
 
 def run_pipeline(drug: str):
-    log.info(f"Full pipeline for {drug!r} — not built yet (Day 3 closes the loop).")
+    """Day 3: full flow — retrieve relevant evidence -> generate cited report.
+
+    Assumes you've already run `ingest <drug>` so evidence is in Qdrant.
+    """
+    from core.retrieve import retrieve
+    from report.generate import generate_report, save_report
+
+    log.info(f"=== REPORT PIPELINE: {drug!r} ===")
+    chunks = retrieve(drug, top_k=12)
+    if not chunks:
+        log.warning("No evidence in store. Run `python main.py ingest <drug>` first.")
+        return
+
+    report_md = generate_report(drug, chunks)
+    path = save_report(drug, report_md)
+
+    # print to terminal AND save to file
+    print("\n" + "=" * 70)
+    print(report_md)
+    print("=" * 70)
+    print(f"\nSaved to: {path}\n")
 
 
 if __name__ == "__main__":
