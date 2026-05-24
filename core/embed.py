@@ -3,3 +3,51 @@ core/embed.py
 ============
 STUB — filled in later in the plan. See Aletheon_14Day_Sprint_Plan.md.
 """
+"""
+core/embed.py
+=============
+DAY 2: turn text into vectors using the OpenAI embeddings API.
+
+One function: embed_texts(list[str]) -> list[vector].
+Batches requests so we never blow past limits (the Day-8 token work hardens this).
+"""
+
+from openai import OpenAI
+
+from core.config import config
+from core.logging_setup import log
+
+_client = None
+
+
+def _get_client() -> OpenAI:
+    global _client
+    if _client is None:
+        if not config.OPENAI_API_KEY:
+            raise RuntimeError("OPENAI_API_KEY is not set in .env")
+        _client = OpenAI(api_key=config.OPENAI_API_KEY)
+    return _client
+
+
+# text-embedding-3-small returns 1536-dim vectors.
+EMBED_DIM = 1536
+
+
+def embed_texts(texts: list[str], batch_size: int = 100) -> list[list[float]]:
+    """Embed a list of strings, batched. Returns one vector per input."""
+    if not texts:
+        return []
+    client = _get_client()
+    vectors: list[list[float]] = []
+    for start in range(0, len(texts), batch_size):
+        batch = texts[start:start + batch_size]
+        log.info(f"[embed] embedding {len(batch)} chunks "
+                 f"({start + len(batch)}/{len(texts)}) …")
+        resp = client.embeddings.create(model=config.EMBED_MODEL, input=batch)
+        vectors.extend(d.embedding for d in resp.data)
+    return vectors
+
+
+def embed_query(text: str) -> list[float]:
+    """Embed a single query string."""
+    return embed_texts([text])[0]

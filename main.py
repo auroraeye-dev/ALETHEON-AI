@@ -1,10 +1,12 @@
 """
 main.py
 =======
-The single entry point for Aletheon.
+Entry point for Aletheon.
 
-Day 1:  python main.py            -> prints "alive" + a sample Evidence
-Day 3+: python main.py "aspirin"  -> runs the full pipeline -> cited report
+  python main.py                  -> healthcheck (Day 1)
+  python main.py ingest aspirin   -> fetch PubMed -> chunk -> embed -> store (Day 2)
+  python main.py search "does aspirin prevent stroke?"  -> retrieve test (Day 2)
+  python main.py "aspirin"        -> full pipeline (Day 3, not built yet)
 """
 
 import sys
@@ -15,41 +17,74 @@ from core.logging_setup import log
 
 
 def healthcheck():
-    """Day-1 proof that the skeleton stands and imports work."""
     log.info("Aletheon is alive ✅")
-
     missing = config.check()
     if missing:
-        log.warning("Missing config (fine for Day 1): " + "; ".join(missing))
-
-    # Prove the Evidence contract works by building one by hand.
+        log.warning("Missing config: " + "; ".join(missing))
     sample = Evidence(
-        source="pubmed",
-        source_id="12345",
+        source="pubmed", source_id="12345",
         title="A sample paper about aspirin and cardiovascular outcomes",
         text="This is placeholder abstract text.",
         url="https://pubmed.ncbi.nlm.nih.gov/12345/",
-        tier=TIER_PEER_REVIEWED,
-        doc_type="paper",
-        date="2024-01-01",
+        tier=TIER_PEER_REVIEWED, doc_type="paper", date="2024-01-01",
     )
     log.info("Sample evidence created: " + sample.short())
 
 
+def ingest(drug: str):
+    """Day 2: fetch a source -> Evidence -> chunks -> embeddings -> Qdrant.
+
+    Using FDA as the test-pilot source (works on your network).
+    PubMed is wired up too but NCBI is currently blocked on your network.
+    """
+    from sources import fda
+    from core.chunk import chunk_all
+    from core.embed import embed_texts
+    from storage import vectorstore
+
+    log.info(f"=== INGEST: {drug!r} ===")
+    evidence = fda.fetch(drug)
+    if not evidence:
+        log.warning("No evidence fetched — stopping.")
+        return
+
+    chunks = chunk_all(evidence)
+    log.info(f"Chunked {len(evidence)} papers -> {len(chunks)} chunks")
+
+    vectors = embed_texts([c.text for c in chunks])
+    vectorstore.index_chunks(chunks, vectors)
+    log.info(f"Done. Qdrant now holds {vectorstore.count()} chunks total.")
+
+
+def search(query: str):
+    """Day 2: embed a query and show what comes back from Qdrant."""
+    from core.embed import embed_query
+    from storage import vectorstore
+
+    log.info(f"=== SEARCH: {query!r} ===")
+    qvec = embed_query(query)
+    hits = vectorstore.search(qvec)
+    if not hits:
+        log.info("No hits. Did you run `ingest` first?")
+        return
+    for i, h in enumerate(hits, 1):
+        p = h.payload
+        print(f"\n#{i}  score={h.score:.3f}  [{p['tier']}] {p['source']}:{p['source_id']}")
+        print(f"    {p['title'][:80]}")
+        print(f"    {p['text'][:160]}…")
+
+
 def run_pipeline(drug: str):
-    """Day 3+ : the real flow. Stubbed until then."""
-    log.info(f"Running Aletheon pipeline for: {drug!r}")
-    log.info("Pipeline not built yet — see the 14-day plan. (Day 3 closes the loop.)")
-    # Future shape:
-    #   evidence = combine.get_all_evidence(drug)
-    #   vectorstore.index(chunk_and_embed(evidence))
-    #   chunks = retrieve.search(drug)
-    #   report = generate.report(drug, chunks)
-    #   save(report)
+    log.info(f"Full pipeline for {drug!r} — not built yet (Day 3 closes the loop).")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        run_pipeline(sys.argv[1])
-    else:
+    args = sys.argv[1:]
+    if not args:
         healthcheck()
+    elif args[0] == "ingest" and len(args) > 1:
+        ingest(args[1])
+    elif args[0] == "search" and len(args) > 1:
+        search(" ".join(args[1:]))
+    else:
+        run_pipeline(args[0])
