@@ -1,0 +1,19 @@
+# Secrets
+.env
+
+# Data (raw fetches, reports, vector store dumps)
+data/raw/
+data/reports/
+*.csv
+*.json
+
+# Python
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
