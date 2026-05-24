@@ -31,19 +31,18 @@ def healthcheck():
     log.info("Sample evidence created: " + sample.short())
 
 
-def ingest(drug: str):
-    """Day 2: fetch a source -> Evidence -> chunks -> embeddings -> Qdrant.
-
-    Using FDA as the test-pilot source (works on your network).
-    PubMed is wired up too but NCBI is currently blocked on your network.
-    """
-    from sources import fda
+def ingest(drug: str, reset: bool = False):
+    """Day 4: fetch from ALL working sources -> combine -> chunk -> embed -> store."""
+    from core.combine import get_all_evidence
     from core.chunk import chunk_all
     from core.embed import embed_texts
     from storage import vectorstore
 
     log.info(f"=== INGEST: {drug!r} ===")
-    evidence = fda.fetch(drug)
+    if reset:
+        vectorstore.reset()
+        log.info("[ingest] store reset — starting clean")
+    evidence = get_all_evidence(drug)
     if not evidence:
         log.warning("No evidence fetched — stopping.")
         return
@@ -103,7 +102,9 @@ if __name__ == "__main__":
     if not args:
         healthcheck()
     elif args[0] == "ingest" and len(args) > 1:
-        ingest(args[1])
+        reset = "--reset" in args
+        drug = next(a for a in args[1:] if a != "--reset")
+        ingest(drug, reset=reset)
     elif args[0] == "search" and len(args) > 1:
         search(" ".join(args[1:]))
     else:
