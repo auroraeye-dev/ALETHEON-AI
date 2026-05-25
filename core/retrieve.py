@@ -49,6 +49,9 @@ def retrieve_for_report(drug: str) -> dict[str, list[dict]]:
     Each section gets a focused query (and the preprint section is tier-filtered),
     so every section is fed the evidence it actually needs.
     """
+    # Normalize to match how the drug was stored at ingest time.
+    drug_key = drug.lower().strip()
+
     # Focused queries per section. The drug name is woven in so retrieval stays
     # on-topic while emphasizing the section's angle.
     section_queries = {
@@ -59,16 +62,16 @@ def retrieve_for_report(drug: str) -> dict[str, list[dict]]:
 
     out: dict[str, list[dict]] = {}
 
-    # Main sections: retrieve across all tiers (regulatory + peer-reviewed weigh in).
+    # Main sections: retrieve across all tiers, but FILTERED to this drug only.
     for section, q in section_queries.items():
         qvec = embed_query(q)
-        hits = vectorstore.search(qvec, top_k=6)
+        hits = vectorstore.search(qvec, top_k=6, drug=drug_key)
         out[section] = _hits_to_dicts(hits)
         log.info(f"[retrieve:{section}] {len(out[section])} chunks")
 
-    # Preprint section: dedicated pull, FILTERED to preprints only.
+    # Preprint section: dedicated pull, filtered to preprints AND this drug.
     qvec = embed_query(f"{drug} preprint emerging recent findings")
-    pre_hits = vectorstore.search(qvec, top_k=5, tier="preprint")
+    pre_hits = vectorstore.search(qvec, top_k=5, tier="preprint", drug=drug_key)
     out["preprint"] = _hits_to_dicts(pre_hits)
     log.info(f"[retrieve:preprint] {len(out['preprint'])} preprint chunks")
 

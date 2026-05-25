@@ -47,7 +47,7 @@ def ingest(drug: str, reset: bool = False):
         log.warning("No evidence fetched — stopping.")
         return
 
-    chunks = chunk_all(evidence)
+    chunks = chunk_all(evidence, drug=drug.lower().strip())
     log.info(f"Chunked {len(evidence)} papers -> {len(chunks)} chunks")
 
     vectors = embed_texts([c.text for c in chunks])

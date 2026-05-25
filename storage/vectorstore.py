@@ -1,12 +1,6 @@
 """
 storage/vectorstore.py
 ======================
-DAY 2: Qdrant wrapper — push chunks (with metadata incl. tier) and search.
-STUB for now.
-"""
-"""
-storage/vectorstore.py
-======================
 DAY 2: Qdrant wrapper in EMBEDDED mode (no Docker needed).
 
 Qdrant stores vectors in a local folder (data/qdrant). We push chunks with
@@ -75,19 +69,23 @@ def index_chunks(chunks: list[Chunk], vectors: list[list[float]]):
                 "tier": ch.tier,
                 "doc_type": ch.doc_type,
                 "chunk_index": ch.chunk_index,
+                "drug": ch.drug,
             },
         ))
     client.upsert(collection_name=config.QDRANT_COLLECTION, points=points)
     log.info(f"[qdrant] indexed {len(points)} chunks")
 
 
-def search(query_vector: list[float], top_k: int = None, tier: str = None):
-    """Return the top_k most similar chunks. Optionally filter by tier."""
+def search(query_vector: list[float], top_k: int = None, tier: str = None, drug: str = None):
+    """Return the top_k most similar chunks. Optionally filter by tier and/or drug."""
     client = _get_client()
     top_k = top_k or config.RETRIEVE_TOP_K
-    qfilter = None
+    conditions = []
     if tier:
-        qfilter = Filter(must=[FieldCondition(key="tier", match=MatchValue(value=tier))])
+        conditions.append(FieldCondition(key="tier", match=MatchValue(value=tier)))
+    if drug:
+        conditions.append(FieldCondition(key="drug", match=MatchValue(value=drug)))
+    qfilter = Filter(must=conditions) if conditions else None
     hits = client.query_points(
         collection_name=config.QDRANT_COLLECTION,
         query=query_vector,

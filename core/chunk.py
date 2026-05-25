@@ -1,10 +1,5 @@
 """
 core/chunk.py
-============
-STUB — filled in later in the plan. See Aletheon_14Day_Sprint_Plan.md.
-"""
-"""
-core/chunk.py
 =============
 DAY 2: simple paragraph-aware chunking (Day 7 upgrades this to be smarter).
 
@@ -31,6 +26,7 @@ class Chunk:
     tier: str
     doc_type: str
     chunk_index: int
+    drug: str = ""   # the drug this chunk was ingested under (for filtering)
 
 
 def _rough_token_count(text: str) -> int:
@@ -63,7 +59,7 @@ def _split_paragraphs(text: str) -> list[str]:
     return out
 
 
-def chunk_evidence(ev: Evidence) -> list[Chunk]:
+def chunk_evidence(ev: Evidence, drug: str = "") -> list[Chunk]:
     """Turn one Evidence into one or more Chunks (boundary-aware)."""
     # Prepend the title to the first chunk so the topic is always in-context.
     body = f"{ev.title}\n\n{ev.text}" if ev.title else ev.text
@@ -79,12 +75,13 @@ def chunk_evidence(ev: Evidence) -> list[Chunk]:
             tier=ev.tier,
             doc_type=ev.doc_type,
             chunk_index=i,
+            drug=drug,
         ))
     return chunks
 
 
-def chunk_all(evidence: list[Evidence]) -> list[Chunk]:
+def chunk_all(evidence: list[Evidence], drug: str = "") -> list[Chunk]:
     chunks = []
     for ev in evidence:
-        chunks.extend(chunk_evidence(ev))
+        chunks.extend(chunk_evidence(ev, drug=drug))
     return chunks
