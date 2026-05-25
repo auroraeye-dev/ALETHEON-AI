@@ -1,14 +1,12 @@
 """
 report/generate.py
 ==================
-DAY 3: turn retrieved evidence chunks into a structured, CITED report.
+DAY 7 (retrieval upgrade): build the report from SECTION-TARGETED evidence.
 
-Key design choices (these are what make it trustworthy, not just impressive):
-  - The LLM is told to answer ONLY from the provided evidence (low hallucination).
-  - Every chunk is given a numbered [E#] tag; the model must cite those tags.
-  - Evidence is grouped by TIER, and preprints are forced into their own
-    clearly-labeled section (ready for when preprint sources come online).
-  - We build a Sources list from the real metadata, so citations resolve.
+Each section is fed evidence retrieved specifically for it (safety chunks for
+Safety, efficacy chunks for Key Findings, preprint-filtered chunks for the
+Preprint section). All chunks are merged into one numbered [E#] list so
+citations resolve, and we dedup so the same chunk isn't shown twice.
 """
 
 import os
@@ -18,16 +16,6 @@ from openai import OpenAI
 
 from core.config import config
 from core.logging_setup import log
-
-# Tier display order + headings for the evidence we feed the model.
-TIER_ORDER = ["regulatory", "peer_reviewed", "real_world", "preprint", "patent"]
-TIER_LABEL = {
-    "regulatory": "Regulatory (FDA/EMA)",
-    "peer_reviewed": "Peer-reviewed",
-    "real_world": "Real-world / Safety",
-    "preprint": "Preprint (NOT peer-reviewed)",
-    "patent": "Patent",
-}
 
 _client = None
 
@@ -41,69 +29,104 @@ def _get_client() -> OpenAI:
     return _client
 
 
-def _format_evidence(chunks: list[dict]) -> tuple[str, list[dict]]:
-    """Number each chunk as [E#] and group by tier for the prompt.
-    Returns (evidence_text_block, ordered_chunks_with_tags)."""
-    # order chunks by tier so the model sees authoritative evidence first
-    ordered = sorted(
-        chunks,
-        key=lambda c: TIER_ORDER.index(c["tier"]) if c["tier"] in TIER_ORDER else 99,
-    )
+def _merge_and_tag(sections: dict[str, list[dict]]) -> tuple[dict, list[dict]]:
+    """Dedup chunks across sections, assign each a stable [E#] tag.
+    Returns (section -> list of tags, ordered unique chunks with .tag)."""
+    unique = {}          # (source, source_id, text) -> chunk
+    section_tags = {}    # section -> list of E# tags
+
+    # First pass: collect unique chunks, preserving first-seen order.
+    ordered = []
+    for section, chunks in sections.items():
+        for c in chunks:
+            key = (c["source"], c["source_id"], c["text"][:50])
+            if key not in unique:
+                c = dict(c)  # copy
+                c["tag"] = f"E{len(ordered) + 1}"
+                unique[key] = c
+                ordered.append(c)
+
+    # Second pass: map each section to the tags it uses.
+    for section, chunks in sections.items():
+        tags = []
+        for c in chunks:
+            key = (c["source"], c["source_id"], c["text"][:50])
+            tags.append(unique[key]["tag"])
+        section_tags[section] = tags
+
+    return section_tags, ordered
+
+
+def _evidence_block(section_tags: dict, ordered: list[dict]) -> str:
+    """Format the evidence the LLM sees, grouped by which section it's for."""
     lines = []
-    for i, c in enumerate(ordered, 1):
-        c["tag"] = f"E{i}"
-        lines.append(
-            f"[E{i}] (tier: {c['tier']}, source: {c['source']}:{c['source_id']}, "
-            f"title: {c['title']})\n{c['text']}"
-        )
-    return "\n\n".join(lines), ordered
+    label = {
+        "overview": "OVERVIEW evidence",
+        "efficacy": "EFFICACY / FINDINGS evidence",
+        "safety": "SAFETY evidence",
+        "preprint": "PREPRINT evidence (NOT peer-reviewed)",
+    }
+    for section in ["overview", "efficacy", "safety", "preprint"]:
+        tags = section_tags.get(section, [])
+        if not tags:
+            continue
+        lines.append(f"\n=== {label[section]} ===")
+        seen = set()
+        for c in ordered:
+            if c["tag"] in tags and c["tag"] not in seen:
+                seen.add(c["tag"])
+                lines.append(f"[{c['tag']}] (tier: {c['tier']}, {c['source']}:{c['source_id']}) {c['text']}")
+    return "\n".join(lines)
 
 
-SYSTEM_PROMPT = """You are Aletheon, a drug-intelligence analyst. You write \
+SYSTEM_PROMPT = """You are Aletheon, a drug-intelligence analyst writing \
 evidence-grounded reports for healthcare and pharma researchers.
 
 ABSOLUTE RULES:
-1. Use ONLY the evidence provided. Do NOT use outside knowledge. If the evidence \
-does not support a claim, do not make it.
+1. Use ONLY the evidence provided. No outside knowledge. If evidence doesn't \
+support a claim, don't make it.
 2. Cite every factual claim with its evidence tag(s), e.g. [E3] or [E1][E4].
-3. If evidence is insufficient for a section, write "Insufficient evidence in sources."
-4. Keep PREPRINT evidence (tier: preprint) strictly inside the "Preprint / Emerging \
-Evidence" section, and note it is NOT peer-reviewed. Never mix preprint claims into \
-the main findings.
-5. Be concise, factual, and neutral. No marketing language."""
+3. If a section has no supporting evidence, write "Insufficient evidence in sources."
+4. PREPRINT evidence belongs ONLY in the Preprint section, and must be flagged \
+as not peer-reviewed. Never mix preprint claims into other sections.
+5. Be concise, factual, neutral. No marketing language."""
 
 USER_TEMPLATE = """Drug / query: {drug}
 
-EVIDENCE (each item tagged [E#]):
+The evidence below is grouped by which section it supports. Use each group for
+its section. Cite with [E#] tags.
+
 {evidence}
 
-Write a structured report in Markdown with EXACTLY these sections:
+Write a Markdown report with EXACTLY these sections:
 
 ## Summary
-A 2-4 sentence neutral overview, cited.
+2-4 sentence neutral overview (use OVERVIEW evidence), cited.
 
 ## Key Findings
-Bulleted, the most important evidence-backed points, each cited.
+Most important efficacy/clinical points (use EFFICACY evidence), bulleted, cited.
 
 ## Safety / Warnings
-Adverse effects, contraindications, risks found in the evidence, cited.
+Adverse effects, contraindications, risks (use SAFETY evidence), bulleted, cited.
 
 ## Preprint / Emerging Evidence (not yet peer-reviewed)
-ONLY content from tier: preprint evidence. If there is none, write \
+ONLY from PREPRINT evidence. Flag as not peer-reviewed. If none, write \
 "No preprint evidence in current sources."
 
-Do not add sections beyond these. Cite using [E#] tags only."""
+Cite using [E#] tags only. Do not add other sections."""
 
 
-def generate_report(drug: str, chunks: list[dict]) -> str:
-    """Generate the cited report body (Markdown) from retrieved chunks."""
-    if not chunks:
+def generate_report(drug: str, sections: dict[str, list[dict]]) -> str:
+    """Generate the cited report from section-targeted evidence."""
+    section_tags, ordered = _merge_and_tag(sections)
+    if not ordered:
         return f"# Aletheon Report: {drug}\n\n_No evidence retrieved._\n"
 
-    evidence_block, ordered = _format_evidence(chunks)
+    evidence_block = _evidence_block(section_tags, ordered)
     client = _get_client()
 
-    log.info(f"[report] generating report for {drug!r} from {len(chunks)} chunks …")
+    log.info(f"[report] generating for {drug!r} from {len(ordered)} unique chunks "
+             f"across {len([s for s in sections if sections[s]])} sections …")
     resp = client.chat.completions.create(
         model=config.LLM_MODEL,
         messages=[
@@ -111,11 +134,11 @@ def generate_report(drug: str, chunks: list[dict]) -> str:
             {"role": "user", "content": USER_TEMPLATE.format(
                 drug=drug, evidence=evidence_block)},
         ],
-        temperature=0.2,  # low = factual, less invention
+        temperature=0.2,
     )
     body = resp.choices[0].message.content
 
-    # Build a real Sources list from metadata so [E#] tags resolve.
+    # Sources list from the deduped, tagged chunks.
     sources_lines = ["\n## Sources\n"]
     for c in ordered:
         sources_lines.append(
@@ -126,13 +149,13 @@ def generate_report(drug: str, chunks: list[dict]) -> str:
 
     header = (f"# Aletheon Report: {drug}\n\n"
               f"_Generated {datetime.now():%Y-%m-%d %H:%M} · "
-              f"{len(chunks)} evidence chunks · grounded in retrieved sources only_\n\n")
+              f"{len(ordered)} evidence chunks (section-targeted) · "
+              f"grounded in retrieved sources only_\n\n")
 
     return header + body + "\n" + sources
 
 
 def save_report(drug: str, report_md: str) -> str:
-    """Save the report to data/reports/{drug}/report_{timestamp}.md. Returns path."""
     safe = "".join(ch if ch.isalnum() else "_" for ch in drug.lower())
     folder = os.path.join(config.REPORTS_DIR, safe)
     os.makedirs(folder, exist_ok=True)

@@ -18,11 +18,12 @@ from core.logging_setup import log
 # Each entry: (name, fetch_function). Only sources that work on your network.
 # PubMed is intentionally omitted for now (NCBI blocked on your network);
 # re-add it here in one line once you're on a network that allows NCBI.
-from sources import fda, clinicaltrials
+from sources import fda, clinicaltrials, europepmc
 
 SOURCES = [
     ("fda", fda.fetch),
     ("clinicaltrials", clinicaltrials.fetch),
+    ("europepmc", europepmc.fetch),
 ]
 
 
