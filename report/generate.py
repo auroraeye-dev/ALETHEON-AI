@@ -79,19 +79,47 @@ def _evidence_block(section_tags: dict, ordered: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _tier_tally(ordered: list[dict]) -> str:
+    """Summarize the evidence mix so the LLM can ground its confidence judgments."""
+    counts = {}
+    for c in ordered:
+        counts[c["tier"]] = counts.get(c["tier"], 0) + 1
+    parts = [f"{n} {tier}" for tier, n in sorted(counts.items())]
+    return ", ".join(parts) if parts else "none"
+
+
+# How authoritative each tier is — given to the LLM to weight confidence.
+TIER_AUTHORITY = (
+    "Evidence authority (most to least): regulatory (FDA/EMA) and peer-reviewed "
+    "RCTs are strongest; observational/real-world is moderate; PREPRINTS are "
+    "weakest (NOT peer-reviewed) and must never raise confidence on their own."
+)
+
 SYSTEM_PROMPT = """You are Aletheon, a drug-intelligence analyst writing \
-evidence-grounded reports for healthcare and pharma researchers.
+evidence-grounded reports for healthcare and pharma researchers. Your defining \
+trait is HONESTY ABOUT EVIDENCE: you show how strong the support is and where \
+sources disagree, rather than presenting everything as equally certain.
 
 ABSOLUTE RULES:
 1. Use ONLY the evidence provided. No outside knowledge. If evidence doesn't \
 support a claim, don't make it.
 2. Cite every factual claim with its evidence tag(s), e.g. [E3] or [E1][E4].
 3. If a section has no supporting evidence, write "Insufficient evidence in sources."
-4. PREPRINT evidence belongs ONLY in the Preprint section, and must be flagged \
-as not peer-reviewed. Never mix preprint claims into other sections.
-5. Be concise, factual, neutral. No marketing language."""
+4. PREPRINT evidence belongs ONLY in the Preprint section, flagged as not \
+peer-reviewed. Never let a preprint alone raise a finding's confidence.
+5. CONFIDENCE: after each Key Finding, append a confidence tag in the form \
+**(Confidence: High|Medium|Low — brief reason citing how many sources and which \
+tiers support it)**. High = multiple regulatory/peer-reviewed sources agree. \
+Medium = some support or only moderate-tier sources. Low = single source, weak \
+tier, or only a preprint.
+6. CONTRADICTIONS: if two or more pieces of evidence disagree, you MUST surface \
+this in the Contradictions section with both sides cited. Do not hide disagreement.
+7. Be concise, factual, neutral. No marketing language."""
 
 USER_TEMPLATE = """Drug / query: {drug}
+
+Evidence mix retrieved: {tier_tally}
+{tier_authority}
 
 The evidence below is grouped by which section it supports. Use each group for
 its section. Cite with [E#] tags.
@@ -105,9 +133,16 @@ Write a Markdown report with EXACTLY these sections:
 
 ## Key Findings
 Most important efficacy/clinical points (use EFFICACY evidence), bulleted, cited.
+After EACH finding, append its confidence tag: \
+**(Confidence: High|Medium|Low — reason)**.
 
 ## Safety / Warnings
 Adverse effects, contraindications, risks (use SAFETY evidence), bulleted, cited.
+
+## Contradictions & Disagreements
+Surface any points where the evidence conflicts (e.g. one source reports benefit, \
+another no effect), citing both sides. If no contradictions are found in the \
+evidence, write "No direct contradictions found in current sources."
 
 ## Preprint / Emerging Evidence (not yet peer-reviewed)
 ONLY from PREPRINT evidence. Flag as not peer-reviewed. If none, write \
@@ -132,7 +167,10 @@ def generate_report(drug: str, sections: dict[str, list[dict]]) -> str:
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": USER_TEMPLATE.format(
-                drug=drug, evidence=evidence_block)},
+                drug=drug,
+                evidence=evidence_block,
+                tier_tally=_tier_tally(ordered),
+                tier_authority=TIER_AUTHORITY)},
         ],
         temperature=0.2,
     )
