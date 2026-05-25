@@ -1,6 +1,14 @@
+# Core
 python-dotenv
-openai
-qdrant-client
-tiktoken
 requests
 pandas
+
+# LLM + embeddings
+openai
+tiktoken
+
+# Vector store (embedded mode, no Docker)
+qdrant-client
+
+# Orchestration
+langgraph
