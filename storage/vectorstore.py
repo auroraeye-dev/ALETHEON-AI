@@ -13,6 +13,7 @@ in _get_client() — nothing else in the codebase changes.
 
 import os
 import uuid
+import atexit
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
@@ -34,6 +35,21 @@ def _get_client() -> QdrantClient:
         os.makedirs(QDRANT_PATH, exist_ok=True)
         _client = QdrantClient(path=QDRANT_PATH)
     return _client
+
+
+def _close_client():
+    """Close Qdrant cleanly BEFORE Python shuts down (silences the harmless
+    'sys.meta_path is None' traceback that embedded Qdrant prints on exit)."""
+    global _client
+    if _client is not None:
+        try:
+            _client.close()
+        except Exception:
+            pass
+        _client = None
+
+
+atexit.register(_close_client)
 
 
 def ensure_collection():

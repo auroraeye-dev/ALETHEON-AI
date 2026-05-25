@@ -64,9 +64,10 @@ def _evidence_block(section_tags: dict, ordered: list[dict]) -> str:
         "overview": "OVERVIEW evidence",
         "efficacy": "EFFICACY / FINDINGS evidence",
         "safety": "SAFETY evidence",
+        "contradiction": "CONTRADICTION-CHECK evidence (both supportive AND opposing — compare these for conflicts)",
         "preprint": "PREPRINT evidence (NOT peer-reviewed)",
     }
-    for section in ["overview", "efficacy", "safety", "preprint"]:
+    for section in ["overview", "efficacy", "safety", "contradiction", "preprint"]:
         tags = section_tags.get(section, [])
         if not tags:
             continue
@@ -140,9 +141,10 @@ After EACH finding, append its confidence tag: \
 Adverse effects, contraindications, risks (use SAFETY evidence), bulleted, cited.
 
 ## Contradictions & Disagreements
-Surface any points where the evidence conflicts (e.g. one source reports benefit, \
-another no effect), citing both sides. If no contradictions are found in the \
-evidence, write "No direct contradictions found in current sources."
+Examine the CONTRADICTION-CHECK evidence (and all other evidence) for points where \
+findings conflict — e.g. one source reports benefit, another reports no effect or \
+harm. Surface each conflict with both sides cited. If genuinely none conflict, \
+write "No direct contradictions found in current sources."
 
 ## Preprint / Emerging Evidence (not yet peer-reviewed)
 ONLY from PREPRINT evidence. Flag as not peer-reviewed. If none, write \

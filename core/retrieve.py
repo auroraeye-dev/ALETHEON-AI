@@ -43,31 +43,60 @@ def retrieve(query: str, top_k: int = None, tier: str = None) -> list[dict]:
     return results
 
 
-def retrieve_for_report(drug: str) -> dict[str, list[dict]]:
-    """Section-targeted retrieval. Returns a dict: section -> list of chunks.
+def _dedup(chunks: list[dict]) -> list[dict]:
+    seen, out = set(), []
+    for c in chunks:
+        key = (c["source"], c["source_id"], c["text"][:60])
+        if key not in seen:
+            seen.add(key)
+            out.append(c)
+    return out
 
-    Each section gets a focused query (and the preprint section is tier-filtered),
-    so every section is fed the evidence it actually needs.
+
+def retrieve_for_report(drug: str) -> dict[str, list[dict]]:
+    """Section-targeted retrieval with tier-aware biasing.
+
+    Refinements (polish pass):
+      - Efficacy/Findings deliberately pulls from regulatory + peer-reviewed so
+        strong RCTs surface instead of being crowded out by preprints.
+      - A dedicated 'contradiction' pull retrieves BOTH supportive and
+        opposing evidence, so the Contradictions section has material to work with.
+      - More chunks per section so good evidence isn't lost.
     """
-    # Normalize to match how the drug was stored at ingest time.
     drug_key = drug.lower().strip()
 
-    # Focused queries per section. The drug name is woven in so retrieval stays
-    # on-topic while emphasizing the section's angle.
     section_queries = {
-        "overview":   f"{drug} overview indication mechanism of action what it treats",
-        "efficacy":   f"{drug} efficacy clinical trial outcomes effectiveness results benefit",
-        "safety":     f"{drug} adverse effects side effects warnings contraindications risks bleeding toxicity",
+        "overview": f"{drug} overview indication mechanism of action what it treats",
+        "safety":   f"{drug} adverse effects side effects warnings contraindications risks bleeding toxicity",
     }
 
     out: dict[str, list[dict]] = {}
 
-    # Main sections: retrieve across all tiers, but FILTERED to this drug only.
+    # Overview + Safety: standard drug-filtered retrieval, a bit deeper (top_k=8).
     for section, q in section_queries.items():
         qvec = embed_query(q)
-        hits = vectorstore.search(qvec, top_k=6, drug=drug_key)
+        hits = vectorstore.search(qvec, top_k=8, drug=drug_key)
         out[section] = _hits_to_dicts(hits)
         log.info(f"[retrieve:{section}] {len(out[section])} chunks")
+
+    # Efficacy/Findings: pull SEPARATELY from the strongest tiers so RCTs and
+    # regulatory evidence drive the findings, not whatever ranks highest overall.
+    eff_q = f"{drug} efficacy clinical trial RCT outcomes effectiveness results benefit"
+    eff_vec = embed_query(eff_q)
+    eff = []
+    eff += _hits_to_dicts(vectorstore.search(eff_vec, top_k=5, drug=drug_key, tier="peer_reviewed"))
+    eff += _hits_to_dicts(vectorstore.search(eff_vec, top_k=4, drug=drug_key, tier="regulatory"))
+    out["efficacy"] = _dedup(eff)
+    log.info(f"[retrieve:efficacy] {len(out['efficacy'])} chunks (peer-reviewed + regulatory)")
+
+    # Contradictions: deliberately retrieve BOTH sides so conflicts can surface.
+    pro = embed_query(f"{drug} effective benefit reduces risk improves outcomes")
+    con = embed_query(f"{drug} no benefit ineffective increased risk harm no significant difference")
+    contra = []
+    contra += _hits_to_dicts(vectorstore.search(pro, top_k=4, drug=drug_key))
+    contra += _hits_to_dicts(vectorstore.search(con, top_k=4, drug=drug_key))
+    out["contradiction"] = _dedup(contra)
+    log.info(f"[retrieve:contradiction] {len(out['contradiction'])} chunks (both sides)")
 
     # Preprint section: dedicated pull, filtered to preprints AND this drug.
     qvec = embed_query(f"{drug} preprint emerging recent findings")

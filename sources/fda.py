@@ -56,16 +56,37 @@ def _label_id(item: dict, idx: int) -> str:
 
 
 def fetch(drug: str, limit: int = 10) -> list[Evidence]:
-    """Search openFDA drug labels for `drug` and return Evidence (regulatory)."""
+    """Search openFDA drug labels for `drug` and return Evidence (regulatory).
+
+    Targets the drug-NAME fields (generic/brand) rather than a blanket text
+    search, so labels that merely *mention* the drug (e.g. other NSAIDs naming
+    aspirin) are far less likely to come back. Falls back to broad search if
+    the targeted query finds nothing.
+    """
     log.info(f"[fda] searching labels for {drug!r} ...")
-    params = {"search": drug, "limit": limit}
-    try:
+    d = drug.strip().lower()
+    # Targeted: match the drug name in the generic or brand name fields.
+    targeted = f'openfda.generic_name:"{d}" OR openfda.brand_name:"{d}"'
+
+    def _request(search_value):
+        params = {"search": search_value, "limit": limit}
         r = requests.get(FDA_URL, params=params, headers=HEADERS, timeout=20)
         r.raise_for_status()
-        data = r.json()
+        return r.json()
+
+    try:
+        data = _request(targeted)
+        if not data.get("results"):
+            log.info("[fda] targeted search empty, falling back to broad search")
+            data = _request(drug)
     except Exception as e:
-        log.warning(f"[fda] request failed: {e}")
-        return []
+        # openFDA returns 404 when a targeted query has no matches; fall back.
+        log.info(f"[fda] targeted search failed ({e}); trying broad search")
+        try:
+            data = _request(drug)
+        except Exception as e2:
+            log.warning(f"[fda] request failed: {e2}")
+            return []
 
     results = data.get("results", [])
     if not results:
