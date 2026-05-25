@@ -103,5 +103,16 @@ if __name__ == "__main__":
         ingest(drug, reset=reset)
     elif args[0] == "search" and len(args) > 1:
         search(" ".join(args[1:]))
+    elif args[0] == "flow" and len(args) > 1:
+        # Full orchestrated pipeline (LangGraph): parallel fetch -> combine ->
+        # index -> retrieve -> report, all in one graph run.
+        from core.graph import run as run_flow
+        reset = "--reset" in args
+        drug = next(a for a in args[1:] if a != "--reset")
+        result = run_flow(drug, reset=reset)
+        print("\n" + "=" * 70)
+        print(result["report"])
+        print("=" * 70)
+        print(f"\nSaved to: {result['report_path']}\n")
     else:
         run_pipeline(args[0])
