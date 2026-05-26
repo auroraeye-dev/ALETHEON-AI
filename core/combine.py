@@ -19,12 +19,13 @@ from core.relevance import filter_relevant
 # Each entry: (name, fetch_function). Only sources that work on your network.
 # PubMed is intentionally omitted for now (NCBI blocked on your network);
 # re-add it here in one line once you're on a network that allows NCBI.
-from sources import fda, clinicaltrials, europepmc
+from sources import fda, clinicaltrials, europepmc, faers
 
 SOURCES = [
     ("fda", fda.fetch),
     ("clinicaltrials", clinicaltrials.fetch),
     ("europepmc", europepmc.fetch),
+    ("faers", faers.fetch),
 ]
 
 
