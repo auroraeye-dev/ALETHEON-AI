@@ -1,0 +1,49 @@
+FINAL ROADMAP
+PRE-BUILD-2 — Finishing polish (make the prototype trustworthy & measurable)
+The minimal set that turns the working prototype into a trustworthy, measurable foundation before it becomes your deployment base:
+
+A1 — Sibling-drug precision (stop wrong-drug citations — protects core trust)
+B1 — Variable report length (short → 1pg, detailed → 4–5pg, done right)
+Semantic chunking (break by meaning — lifts retrieval quality)
+C1 — FAERS (real-world adverse-event signals — new evidence type)
+E1 — Evaluation harness (measure quality across drugs with numbers)
+E2 — Cost & speed measurement ($/report, sec/report — deployment-critical)
+
+
+A2 (preprint leak) + A3 (dedup) folded in free during report/retrieval work
+
+BUILD-2 — Deployment base & workstation (capability + production-hardening)
+Everything else useful, consolidated here:
+Capability:
+
+Feedback loop in LangGraph ← flagship (report → self-evaluate → re-retrieve)
+D1 — Comparator agent (compare two drugs)
+D2 — Critic agent (attacks own conclusions)
+D3 — Autonomous research loop (identifies gaps, re-searches, refines)
+
+More sources (plug into the graph):
+
+C2 — PubMed (when network allows)
+C3 — medRxiv (more preprints)
+C4 — Patents / Lens.org (commercial/IP intelligence)
+C5 — DailyMed / RxNorm (structured label data)
+
+Report output:
+
+B2 — Richer structure (Dosing, Mechanism, Interactions, Populations sections)
+B3 — Export formats (PDF / Word)
+
+Production engineering:
+
+E3 — Caching (instant, cheaper re-runs)
+E4 — Error handling & edge cases (robustness for real users)
+E5 — Tunable retrieval config (top-k, chunk size, tier weights)
+
+Intelligence depth:
+
+F1 — Numeric confidence scoring
+F2 — Evidence traceability graph (claim → paragraph → paper chain)
+F3 — Statistical inference layer (effect sizes, CIs, meta-analysis)
+
+BUILD-3 — Launch (post-summer)
+Website / React UI · AWS migration · security & compliance ("sigma" layer) · auth & multi-user · data-freshness pipelines · public launch.

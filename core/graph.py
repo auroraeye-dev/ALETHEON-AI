@@ -69,9 +69,16 @@ def _fetch_node(name, fetch_fn):
 
 
 def _combine_node(state: DrugState) -> dict:
-    """Fan-in: dedup the merged evidence from all fetch nodes."""
+    """Fan-in: precision-filter + dedup the merged evidence from all fetch nodes."""
+    from core.relevance import filter_relevant
+
+    # A1 PRECISION GATE: drop off-drug (sibling) evidence first.
+    filtered, dropped = filter_relevant(state["evidence"], state["drug"])
+    if dropped:
+        log.info(f"[graph:combine] precision filter dropped {dropped} off-drug")
+
     seen, deduped = set(), []
-    for ev in state["evidence"]:
+    for ev in filtered:
         key = (ev.source, ev.source_id)
         if key in seen:
             continue

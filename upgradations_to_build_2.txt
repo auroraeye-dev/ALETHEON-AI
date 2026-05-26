@@ -1,0 +1,28 @@
+A. Accuracy & Trust (protect the core promise)
+A1 — Sibling-drug precision. Stop Etodolac/Ketorolac/other NSAIDs slipping into a drug's report. Tighten source queries and add a verification step. High value (wrong-drug citation is your worst possible error), medium effort.
+A2 — Preprint cross-reference leak. Preprints occasionally appear in Key Findings (flagged, but they should stay only in the Preprint section). Low value, low effort — cosmetic.
+A3 — Duplicate/near-duplicate sources. Same study appears twice (e.g. E14/E16 were the same paper), and multiple brand-variants of one drug cluster. Dedup smarter. Medium value, low effort.
+B. Report Quality & Output (your idea)
+B1 — Variable report length. short → 1 page, detailed → 4–5 pages. Done right = retrieve more evidence for longer reports, not just prompt "write more" (which risks hallucination). High value (visible product feature), medium effort.
+B2 — Richer report structure. Add sections like Dosing, Mechanism of Action, Drug Interactions, Populations (pediatric/elderly/pregnancy) as distinct targeted sections. Medium value, medium effort.
+B3 — Export formats. Currently Markdown only. Add PDF / Word export for a shareable deliverable. Medium value, low-medium effort.
+C. More Data Sources (your idea)
+C1 — FAERS (openFDA adverse events). Real-world safety signals — a genuinely new evidence type. High value, low effort.
+C2 — PubMed. Gold-standard literature — but blocked by your network's DNS. High value if network allows, low effort.
+C3 — medRxiv (direct). More medical preprints. Medium value, low effort.
+C4 — Patents (Lens.org). Commercial/IP intelligence. Medium value (matches your pharma-intelligence pitch), medium effort — needs API key.
+C5 — DailyMed / RxNorm. Structured drug label data. Low-medium value, low effort.
+D. Capability (new agent types)
+D1 — Comparator agent. "Compare aspirin vs ibuprofen" — comparative reports. High value (visible new capability), medium effort.
+D2 — Critic agent. Attacks the report's own conclusions, flags weak claims. Medium-high value (researcher-grade, on-brand), medium effort.
+D3 — Autonomous research loop. System identifies gaps, searches again, refines. High value but high effort — probably Build 2/3.
+E. Engineering Foundation (deployment readiness)
+E1 — Evaluation harness. Run 10–20 drugs, measure retrieval relevance + report quality with numbers. High value (lets you prove improvement, not guess), medium effort.
+E2 — Cost & speed measurement. Know "$X and Y seconds per report" — foundational for pricing/scaling. High value, low effort.
+E3 — Caching. Don't re-hit APIs / re-embed on repeat runs. Medium value, low-medium effort.
+E4 — Error handling & edge cases. Garbage input, drug with no data, partial source failures. Medium value, low effort.
+E5 — Config for retrieval params. Make top-k, chunk size, tier weights easily tunable. Low-medium value, low effort.
+F. Intelligence Depth (the differentiators)
+F1 — Numeric confidence scoring. Beyond High/Med/Low — a computed score with a formula. Medium value (but risks false precision — we discussed this), medium effort.
+F2 — Evidence traceability graph. Claim → paragraph → paper → dataset chain (from your improvements doc). High value, high effort — likely Build 2/3.
+F3 — Statistical inference layer. Effect sizes, confidence intervals, meta-analysis math. High value, high effort — Build 2/3.

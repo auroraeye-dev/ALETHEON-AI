@@ -14,6 +14,7 @@ returns list[Evidence].
 
 from core.models import Evidence
 from core.logging_setup import log
+from core.relevance import filter_relevant
 
 # Each entry: (name, fetch_function). Only sources that work on your network.
 # PubMed is intentionally omitted for now (NCBI blocked on your network);
@@ -38,6 +39,14 @@ def get_all_evidence(drug: str) -> list[Evidence]:
         except Exception as e:
             # graceful: log and continue, never crash the whole pipeline
             log.warning(f"[combine] source {name!r} failed: {e}")
+
+    # A1 PRECISION GATE: drop evidence that's about a DIFFERENT drug (sibling
+    # leak), keeping anything genuinely about the target or ambiguous.
+    before = len(all_evidence)
+    all_evidence, dropped = filter_relevant(all_evidence, drug)
+    if dropped:
+        log.info(f"[combine] precision filter dropped {dropped}/{before} "
+                 f"off-drug evidence for {drug!r}")
 
     # Dedup on (source, source_id) — same doc fetched twice collapses to one.
     seen = set()
