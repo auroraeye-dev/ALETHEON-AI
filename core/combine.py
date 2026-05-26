@@ -33,9 +33,10 @@ def get_all_evidence(drug: str) -> list[Evidence]:
     """Fetch from every source, merge, dedup. One dead source can't kill the run."""
     all_evidence: list[Evidence] = []
 
+    from core.cache import cached_fetch
     for name, fetch_fn in SOURCES:
         try:
-            evidence = fetch_fn(drug)
+            evidence = cached_fetch(name, fetch_fn, drug)
             all_evidence.extend(evidence)
         except Exception as e:
             # graceful: log and continue, never crash the whole pipeline

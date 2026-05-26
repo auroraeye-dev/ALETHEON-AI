@@ -36,6 +36,10 @@ class Config:
     DATA_DIR = os.getenv("DATA_DIR", "data")
     RAW_DIR = os.path.join(DATA_DIR, "raw")
     REPORTS_DIR = os.path.join(DATA_DIR, "reports")
+    CACHE_DIR = os.path.join(DATA_DIR, "cache")
+    # How long a cached fetch stays fresh (hours). Drug evidence changes slowly,
+    # so a day is reasonable for a prototype; tune as needed.
+    CACHE_TTL_HOURS = int(os.getenv("CACHE_TTL_HOURS", "24"))
 
     @classmethod
     def check(cls):

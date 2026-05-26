@@ -61,10 +61,11 @@ class DrugState(TypedDict):
 # ---- NODES (each wraps an existing agent; no agent logic changes) ------
 
 def _fetch_node(name, fetch_fn):
-    """Build a graph node from a source's fetch() function."""
+    """Build a graph node from a source's fetch() function (cached)."""
     def node(state: DrugState) -> dict:
         try:
-            ev = fetch_fn(state["drug"])
+            from core.cache import cached_fetch
+            ev = cached_fetch(name, fetch_fn, state["drug"])
         except Exception as e:
             log.warning(f"[graph:{name}] failed: {e}")
             ev = []

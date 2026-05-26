@@ -107,6 +107,10 @@ if __name__ == "__main__":
 
     if not args:
         healthcheck()
+    elif args[0] == "cache-clear":
+        from core.cache import clear
+        n = clear()
+        print(f"Cleared {n} cache entries.")
     elif args[0] == "ingest" and len(args) > 1:
         reset = "--reset" in args
         drug = next(a for a in args[1:] if a not in FLAGS)
