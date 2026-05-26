@@ -125,6 +125,28 @@ if __name__ == "__main__":
         print(result["report"])
         print("=" * 70)
         print(f"\nSaved to: {result['report_path']}\n")
+    elif args[0] == "compare" and len(args) > 2:
+        # D1 — head-to-head comparison of two drugs.
+        from core.graph import run as run_flow
+        from core.retrieve import retrieve_for_report
+        from report.compare import generate_comparison, save_comparison
+        reset = "--reset" in args
+        depth = _parse_depth(args)
+        names = [a for a in args[1:] if a not in FLAGS]
+        drug1, drug2 = names[0], names[1]
+        log.info(f"=== COMPARE: {drug1} vs {drug2} ===")
+        # Ingest both into the shared store (drug-tagged, so they coexist).
+        run_flow(drug1, reset=reset, depth=depth)
+        run_flow(drug2, reset=False, depth=depth)
+        # Retrieve each drug's evidence separately, then compare.
+        s1 = retrieve_for_report(drug1, depth=depth)
+        s2 = retrieve_for_report(drug2, depth=depth)
+        md = generate_comparison(drug1, s1, drug2, s2)
+        path = save_comparison(drug1, drug2, md)
+        print("\n" + "=" * 70)
+        print(md)
+        print("=" * 70)
+        print(f"\nSaved to: {path}\n")
     else:
         depth = _parse_depth(args)
         drug = next(a for a in args if a not in FLAGS)
