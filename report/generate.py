@@ -153,17 +153,43 @@ ONLY from PREPRINT evidence. Flag as not peer-reviewed. If none, write \
 Cite using [E#] tags only. Do not add other sections."""
 
 
-def generate_report(drug: str, sections: dict[str, list[dict]]) -> str:
-    """Generate the cited report from section-targeted evidence."""
+# B1 — length guidance injected per depth. This shapes HOW MUCH the LLM writes
+# from the (depth-scaled) evidence it's given. Pairs with retrieval depth:
+# detailed retrieves more evidence AND asks for fuller prose.
+DEPTH_GUIDANCE = {
+    "short": (
+        "LENGTH: Keep this BRIEF — about one page. Summary in 1-2 sentences. "
+        "3-4 of the most important Key Findings only. Safety as a short list of "
+        "the top risks. Be concise; omit minor details."
+    ),
+    "medium": (
+        "LENGTH: A balanced report of moderate length (2-3 pages). Cover the key "
+        "points in each section without exhaustive detail."
+    ),
+    "detailed": (
+        "LENGTH: A THOROUGH, comprehensive report (4-5 pages). Cover findings in "
+        "depth: include specifics (doses, effect sizes, populations, study types) "
+        "wherever the evidence provides them. Key Findings should be a fuller list "
+        "with explanatory detail per point. Safety should comprehensively cover "
+        "adverse effects, contraindications, interactions, and at-risk groups. "
+        "Use ALL relevant evidence provided — but NEVER invent detail not in the "
+        "evidence; if evidence is thin, say so rather than padding."
+    ),
+}
+
+
+def generate_report(drug: str, sections: dict[str, list[dict]], depth: str = "medium") -> str:
+    """Generate the cited report from section-targeted evidence, at the given depth."""
     section_tags, ordered = _merge_and_tag(sections)
     if not ordered:
         return f"# Aletheon Report: {drug}\n\n_No evidence retrieved._\n"
 
     evidence_block = _evidence_block(section_tags, ordered)
+    guidance = DEPTH_GUIDANCE.get(depth, DEPTH_GUIDANCE["medium"])
     client = _get_client()
 
-    log.info(f"[report] generating for {drug!r} from {len(ordered)} unique chunks "
-             f"across {len([s for s in sections if sections[s]])} sections …")
+    log.info(f"[report] generating for {drug!r} (depth={depth}) from {len(ordered)} "
+             f"unique chunks across {len([s for s in sections if sections[s]])} sections …")
     resp = client.chat.completions.create(
         model=config.LLM_MODEL,
         messages=[
@@ -172,7 +198,7 @@ def generate_report(drug: str, sections: dict[str, list[dict]]) -> str:
                 drug=drug,
                 evidence=evidence_block,
                 tier_tally=_tier_tally(ordered),
-                tier_authority=TIER_AUTHORITY)},
+                tier_authority=TIER_AUTHORITY) + "\n\n" + guidance},
         ],
         temperature=0.2,
     )
@@ -189,7 +215,7 @@ def generate_report(drug: str, sections: dict[str, list[dict]]) -> str:
 
     header = (f"# Aletheon Report: {drug}\n\n"
               f"_Generated {datetime.now():%Y-%m-%d %H:%M} · "
-              f"{len(ordered)} evidence chunks (section-targeted) · "
+              f"{len(ordered)} evidence chunks (section-targeted, {depth}) · "
               f"grounded in retrieved sources only_\n\n")
 
     return header + body + "\n" + sources

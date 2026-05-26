@@ -73,18 +73,18 @@ def search(query: str):
         print(f"    {p['text'][:160]}…")
 
 
-def run_pipeline(drug: str):
-    """Day 7: full flow — SECTION-TARGETED retrieval -> generate cited report."""
+def run_pipeline(drug: str, depth: str = "medium"):
+    """Full flow — SECTION-TARGETED retrieval -> generate cited report, at `depth`."""
     from core.retrieve import retrieve_for_report
     from report.generate import generate_report, save_report
 
-    log.info(f"=== REPORT PIPELINE: {drug!r} ===")
-    sections = retrieve_for_report(drug)
+    log.info(f"=== REPORT PIPELINE: {drug!r} (depth={depth}) ===")
+    sections = retrieve_for_report(drug, depth=depth)
     if not any(sections.values()):
         log.warning("No evidence in store. Run `python main.py ingest <drug>` first.")
         return
 
-    report_md = generate_report(drug, sections)
+    report_md = generate_report(drug, sections, depth=depth)
     path = save_report(drug, report_md)
 
     print("\n" + "=" * 70)
@@ -95,24 +95,37 @@ def run_pipeline(drug: str):
 
 if __name__ == "__main__":
     args = sys.argv[1:]
+
+    def _parse_depth(arglist):
+        if "--short" in arglist:
+            return "short"
+        if "--detailed" in arglist:
+            return "detailed"
+        return "medium"
+
+    FLAGS = {"--reset", "--short", "--detailed", "--medium"}
+
     if not args:
         healthcheck()
     elif args[0] == "ingest" and len(args) > 1:
         reset = "--reset" in args
-        drug = next(a for a in args[1:] if a != "--reset")
+        drug = next(a for a in args[1:] if a not in FLAGS)
         ingest(drug, reset=reset)
     elif args[0] == "search" and len(args) > 1:
-        search(" ".join(args[1:]))
+        search(" ".join(a for a in args[1:] if a not in FLAGS))
     elif args[0] == "flow" and len(args) > 1:
         # Full orchestrated pipeline (LangGraph): parallel fetch -> combine ->
         # index -> retrieve -> report, all in one graph run.
         from core.graph import run as run_flow
         reset = "--reset" in args
-        drug = next(a for a in args[1:] if a != "--reset")
-        result = run_flow(drug, reset=reset)
+        depth = _parse_depth(args)
+        drug = next(a for a in args[1:] if a not in FLAGS)
+        result = run_flow(drug, reset=reset, depth=depth)
         print("\n" + "=" * 70)
         print(result["report"])
         print("=" * 70)
         print(f"\nSaved to: {result['report_path']}\n")
     else:
-        run_pipeline(args[0])
+        depth = _parse_depth(args)
+        drug = next(a for a in args if a not in FLAGS)
+        run_pipeline(drug, depth=depth)

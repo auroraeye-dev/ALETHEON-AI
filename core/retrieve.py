@@ -53,17 +53,31 @@ def _dedup(chunks: list[dict]) -> list[dict]:
     return out
 
 
-def retrieve_for_report(drug: str) -> dict[str, list[dict]]:
-    """Section-targeted retrieval with tier-aware biasing.
+# B1 — depth profiles. Each controls how many chunks each section pulls, which
+# is what actually drives report length: more retrieved evidence -> a longer
+# report that's still fully grounded (not padded/hallucinated).
+DEPTH_PROFILES = {
+    "short":    {"overview": 3, "safety": 4, "eff_pr": 2, "eff_reg": 2, "contra": 2, "preprint": 2},
+    "medium":   {"overview": 8, "safety": 8, "eff_pr": 5, "eff_reg": 4, "contra": 4, "preprint": 5},
+    "detailed": {"overview": 14, "safety": 16, "eff_pr": 10, "eff_reg": 8, "contra": 8, "preprint": 8},
+}
 
-    Refinements (polish pass):
-      - Efficacy/Findings deliberately pulls from regulatory + peer-reviewed so
-        strong RCTs surface instead of being crowded out by preprints.
-      - A dedicated 'contradiction' pull retrieves BOTH supportive and
-        opposing evidence, so the Contradictions section has material to work with.
-      - More chunks per section so good evidence isn't lost.
+
+def retrieve_for_report(drug: str, depth: str = "medium") -> dict[str, list[dict]]:
+    """Section-targeted retrieval with tier-aware biasing and variable depth.
+
+    `depth` (short|medium|detailed) scales how many chunks each section pulls:
+      - short:    minimal evidence -> ~1-page report
+      - medium:   balanced (default) -> ~2-3 pages
+      - detailed: lots of evidence per section -> ~4-5 pages, still grounded
+
+    Refinements carried over from the polish pass:
+      - Efficacy pulls separately from peer-reviewed + regulatory (strong RCTs surface).
+      - Contradiction pull retrieves BOTH supportive and opposing evidence.
     """
     drug_key = drug.lower().strip()
+    prof = DEPTH_PROFILES.get(depth, DEPTH_PROFILES["medium"])
+    log.info(f"[retrieve] depth={depth}")
 
     section_queries = {
         "overview": f"{drug} overview indication mechanism of action what it treats",
@@ -72,10 +86,10 @@ def retrieve_for_report(drug: str) -> dict[str, list[dict]]:
 
     out: dict[str, list[dict]] = {}
 
-    # Overview + Safety: standard drug-filtered retrieval, a bit deeper (top_k=8).
+    # Overview + Safety: standard drug-filtered retrieval, depth-scaled.
     for section, q in section_queries.items():
         qvec = embed_query(q)
-        hits = vectorstore.search(qvec, top_k=8, drug=drug_key)
+        hits = vectorstore.search(qvec, top_k=prof[section], drug=drug_key)
         out[section] = _hits_to_dicts(hits)
         log.info(f"[retrieve:{section}] {len(out[section])} chunks")
 
@@ -84,8 +98,8 @@ def retrieve_for_report(drug: str) -> dict[str, list[dict]]:
     eff_q = f"{drug} efficacy clinical trial RCT outcomes effectiveness results benefit"
     eff_vec = embed_query(eff_q)
     eff = []
-    eff += _hits_to_dicts(vectorstore.search(eff_vec, top_k=5, drug=drug_key, tier="peer_reviewed"))
-    eff += _hits_to_dicts(vectorstore.search(eff_vec, top_k=4, drug=drug_key, tier="regulatory"))
+    eff += _hits_to_dicts(vectorstore.search(eff_vec, top_k=prof["eff_pr"], drug=drug_key, tier="peer_reviewed"))
+    eff += _hits_to_dicts(vectorstore.search(eff_vec, top_k=prof["eff_reg"], drug=drug_key, tier="regulatory"))
     out["efficacy"] = _dedup(eff)
     log.info(f"[retrieve:efficacy] {len(out['efficacy'])} chunks (peer-reviewed + regulatory)")
 
@@ -93,14 +107,14 @@ def retrieve_for_report(drug: str) -> dict[str, list[dict]]:
     pro = embed_query(f"{drug} effective benefit reduces risk improves outcomes")
     con = embed_query(f"{drug} no benefit ineffective increased risk harm no significant difference")
     contra = []
-    contra += _hits_to_dicts(vectorstore.search(pro, top_k=4, drug=drug_key))
-    contra += _hits_to_dicts(vectorstore.search(con, top_k=4, drug=drug_key))
+    contra += _hits_to_dicts(vectorstore.search(pro, top_k=prof["contra"], drug=drug_key))
+    contra += _hits_to_dicts(vectorstore.search(con, top_k=prof["contra"], drug=drug_key))
     out["contradiction"] = _dedup(contra)
     log.info(f"[retrieve:contradiction] {len(out['contradiction'])} chunks (both sides)")
 
     # Preprint section: dedicated pull, filtered to preprints AND this drug.
     qvec = embed_query(f"{drug} preprint emerging recent findings")
-    pre_hits = vectorstore.search(qvec, top_k=5, tier="preprint", drug=drug_key)
+    pre_hits = vectorstore.search(qvec, top_k=prof["preprint"], tier="preprint", drug=drug_key)
     out["preprint"] = _hits_to_dicts(pre_hits)
     log.info(f"[retrieve:preprint] {len(out['preprint'])} preprint chunks")
 

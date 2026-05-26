@@ -39,6 +39,7 @@ from core.models import Evidence
 # Each field's reducer decides how node outputs are merged into state.
 class DrugState(TypedDict):
     drug: str
+    depth: str
     # ACCUMULATE: parallel fetch agents each append their evidence here.
     # The operator.add reducer concatenates lists instead of overwriting.
     evidence: Annotated[list, operator.add]
@@ -110,13 +111,14 @@ def _index_node(state: DrugState) -> dict:
 
 def _retrieve_node(state: DrugState) -> dict:
     from core.retrieve import retrieve_for_report
-    sections = retrieve_for_report(state["drug"])
+    sections = retrieve_for_report(state["drug"], depth=state.get("depth", "medium"))
     return {"sections": sections}
 
 
 def _report_node(state: DrugState) -> dict:
     from report.generate import generate_report, save_report
-    report_md = generate_report(state["drug"], state["sections"])
+    report_md = generate_report(state["drug"], state["sections"],
+                                depth=state.get("depth", "medium"))
     path = save_report(state["drug"], report_md)
     return {"report": report_md, "report_path": path}
 
@@ -165,10 +167,10 @@ def build_graph(reset: bool = False):
     return g.compile()
 
 
-def run(drug: str, reset: bool = False) -> dict:
-    """Run the full orchestrated pipeline for `drug`."""
-    log.info(f"=== LANGGRAPH PIPELINE: {drug!r} ===")
+def run(drug: str, reset: bool = False, depth: str = "medium") -> dict:
+    """Run the full orchestrated pipeline for `drug` at the given depth."""
+    log.info(f"=== LANGGRAPH PIPELINE: {drug!r} (depth={depth}) ===")
     graph = build_graph(reset=reset)
-    final = graph.invoke({"drug": drug, "evidence": [], "combined": [],
+    final = graph.invoke({"drug": drug, "depth": depth, "evidence": [], "combined": [],
                           "sections": {}, "report": "", "report_path": ""})
     return final
