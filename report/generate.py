@@ -202,6 +202,15 @@ def generate_report(drug: str, sections: dict[str, list[dict]], depth: str = "me
         ],
         temperature=0.2,
     )
+    # cost/speed tracking (E2)
+    try:
+        from core.metrics import record_llm
+        u = getattr(resp, "usage", None)
+        if u is not None:
+            record_llm(getattr(u, "prompt_tokens", 0),
+                       getattr(u, "completion_tokens", 0), config.LLM_MODEL)
+    except Exception:
+        pass
     body = resp.choices[0].message.content
 
     # Sources list from the deduped, tagged chunks.

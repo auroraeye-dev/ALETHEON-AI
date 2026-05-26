@@ -86,6 +86,7 @@ def index_chunks(chunks: list[Chunk], vectors: list[list[float]]):
                 "doc_type": ch.doc_type,
                 "chunk_index": ch.chunk_index,
                 "drug": ch.drug,
+                "section": getattr(ch, "section", ""),
             },
         ))
     client.upsert(collection_name=config.QDRANT_COLLECTION, points=points)

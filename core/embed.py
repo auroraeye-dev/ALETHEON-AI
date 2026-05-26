@@ -1,10 +1,5 @@
 """
 core/embed.py
-============
-STUB — filled in later in the plan. See Aletheon_14Day_Sprint_Plan.md.
-"""
-"""
-core/embed.py
 =============
 DAY 2: turn text into vectors using the OpenAI embeddings API.
 
@@ -45,6 +40,14 @@ def embed_texts(texts: list[str], batch_size: int = 100) -> list[list[float]]:
                  f"({start + len(batch)}/{len(texts)}) …")
         resp = client.embeddings.create(model=config.EMBED_MODEL, input=batch)
         vectors.extend(d.embedding for d in resp.data)
+        # cost/speed tracking (E2): record token usage if the API reports it
+        try:
+            from core.metrics import record_embed
+            usage = getattr(resp, "usage", None)
+            if usage is not None:
+                record_embed(getattr(usage, "total_tokens", 0), config.EMBED_MODEL)
+        except Exception:
+            pass
     return vectors
 
 
