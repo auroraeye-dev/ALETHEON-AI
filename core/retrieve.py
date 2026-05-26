@@ -63,21 +63,31 @@ DEPTH_PROFILES = {
 }
 
 
-def retrieve_for_report(drug: str, depth: str = "medium") -> dict[str, list[dict]]:
+def retrieve_for_report(drug: str, depth: str = "medium", boost: dict = None) -> dict[str, list[dict]]:
     """Section-targeted retrieval with tier-aware biasing and variable depth.
 
-    `depth` (short|medium|detailed) scales how many chunks each section pulls:
-      - short:    minimal evidence -> ~1-page report
-      - medium:   balanced (default) -> ~2-3 pages
-      - detailed: lots of evidence per section -> ~4-5 pages, still grounded
+    `depth` (short|medium|detailed) scales how many chunks each section pulls.
+    `boost` (optional) adds EXTRA chunks to specific weak sections — used by the
+    feedback loop's corrective pass to deepen sections that came up thin.
 
     Refinements carried over from the polish pass:
       - Efficacy pulls separately from peer-reviewed + regulatory (strong RCTs surface).
       - Contradiction pull retrieves BOTH supportive and opposing evidence.
     """
     drug_key = drug.lower().strip()
-    prof = DEPTH_PROFILES.get(depth, DEPTH_PROFILES["medium"])
-    log.info(f"[retrieve] depth={depth}")
+    prof = dict(DEPTH_PROFILES.get(depth, DEPTH_PROFILES["medium"]))
+    boost = boost or {}
+    # Apply per-section boosts (corrective pass deepens weak sections).
+    if boost.get("overview"):
+        prof["overview"] += boost["overview"]
+    if boost.get("safety"):
+        prof["safety"] += boost["safety"]
+    if boost.get("efficacy"):
+        prof["eff_pr"] += boost["efficacy"]
+        prof["eff_reg"] += max(1, boost["efficacy"] // 2)
+    if boost.get("preprint"):
+        prof["preprint"] += boost["preprint"]
+    log.info(f"[retrieve] depth={depth}" + (f" boost={boost}" if boost else ""))
 
     section_queries = {
         "overview": f"{drug} overview indication mechanism of action what it treats",

@@ -51,6 +51,9 @@ class DrugState(TypedDict):
     sections: dict
     report: str
     report_path: str
+    # feedback loop (Build 2): self-evaluation verdict + a guard against looping
+    verdict: dict
+    corrected: bool
 
 
 # ---- NODES (each wraps an existing agent; no agent logic changes) ------
@@ -123,6 +126,39 @@ def _report_node(state: DrugState) -> dict:
     return {"report": report_md, "report_path": path}
 
 
+def _evaluate_node(state: DrugState) -> dict:
+    """Build 2 feedback loop: self-evaluate the report, decide if a corrective
+    pass is warranted (cheap, structural — no extra LLM call)."""
+    from report.evaluate import evaluate_report
+    verdict = evaluate_report(state.get("report", ""))
+    return {"verdict": verdict}
+
+
+def _correct_node(state: DrugState) -> dict:
+    """Corrective pass: re-retrieve with boosts for weak sections, regenerate
+    the report ONCE. Runs only when evaluate flagged the report as weak."""
+    from core.retrieve import retrieve_for_report
+    from report.generate import generate_report, save_report
+
+    verdict = state.get("verdict", {})
+    boost = verdict.get("boost", {})
+    log.info(f"[graph:correct] corrective pass — boosting {list(boost)} ...")
+    sections = retrieve_for_report(state["drug"], depth=state.get("depth", "medium"),
+                                   boost=boost)
+    report_md = generate_report(state["drug"], sections, depth=state.get("depth", "medium"))
+    path = save_report(state["drug"], report_md)
+    return {"sections": sections, "report": report_md, "report_path": path,
+            "corrected": True}
+
+
+def _needs_correction(state: DrugState) -> str:
+    """Conditional edge: route to corrective pass if weak AND not already corrected."""
+    verdict = state.get("verdict", {})
+    if verdict.get("needs_retry") and not state.get("corrected"):
+        return "correct"
+    return "done"
+
+
 # ---- GRAPH ASSEMBLY ----------------------------------------------------
 
 def build_graph(reset: bool = False):
@@ -147,6 +183,8 @@ def build_graph(reset: bool = False):
     g.add_node("index", _index_node)
     g.add_node("retrieve", _retrieve_node)
     g.add_node("report", _report_node)
+    g.add_node("evaluate", _evaluate_node)
+    g.add_node("correct", _correct_node)
 
     # Fan-out: START -> all fetch nodes in parallel.
     for fn in fetch_names:
@@ -158,11 +196,18 @@ def build_graph(reset: bool = False):
     for fn in fetch_names:
         g.add_edge(fn, "combine")
 
-    # Linear tail.
+    # Linear tail: combine -> index -> retrieve -> report -> evaluate.
     g.add_edge("combine", "index")
     g.add_edge("index", "retrieve")
     g.add_edge("retrieve", "report")
-    g.add_edge("report", END)
+    g.add_edge("report", "evaluate")
+
+    # FEEDBACK LOOP (Build 2): evaluate decides whether to run ONE corrective
+    # pass. If weak -> correct -> END. If solid -> END. The `corrected` guard
+    # in _needs_correction ensures we never loop more than once.
+    g.add_conditional_edges("evaluate", _needs_correction,
+                            {"correct": "correct", "done": END})
+    g.add_edge("correct", END)
 
     return g.compile()
 
@@ -172,5 +217,6 @@ def run(drug: str, reset: bool = False, depth: str = "medium") -> dict:
     log.info(f"=== LANGGRAPH PIPELINE: {drug!r} (depth={depth}) ===")
     graph = build_graph(reset=reset)
     final = graph.invoke({"drug": drug, "depth": depth, "evidence": [], "combined": [],
-                          "sections": {}, "report": "", "report_path": ""})
+                          "sections": {}, "report": "", "report_path": "",
+                          "verdict": {}, "corrected": False})
     return final
