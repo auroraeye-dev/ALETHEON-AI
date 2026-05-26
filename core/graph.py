@@ -54,6 +54,8 @@ class DrugState(TypedDict):
     # feedback loop (Build 2): self-evaluation verdict + a guard against looping
     verdict: dict
     corrected: bool
+    # critic agent (D2): opt-in additive appraisal
+    critic: bool
 
 
 # ---- NODES (each wraps an existing agent; no agent logic changes) ------
@@ -159,6 +161,17 @@ def _needs_correction(state: DrugState) -> str:
     return "done"
 
 
+def _critic_node(state: DrugState) -> dict:
+    """D2: opt-in. Append a Critical Appraisal to the FINAL report (additive)."""
+    if not state.get("critic"):
+        return {}
+    from report.critic import append_appraisal
+    from report.generate import save_report
+    appraised = append_appraisal(state["drug"], state.get("report", ""))
+    path = save_report(state["drug"], appraised)
+    return {"report": appraised, "report_path": path}
+
+
 # ---- GRAPH ASSEMBLY ----------------------------------------------------
 
 def build_graph(reset: bool = False):
@@ -185,6 +198,7 @@ def build_graph(reset: bool = False):
     g.add_node("report", _report_node)
     g.add_node("evaluate", _evaluate_node)
     g.add_node("correct", _correct_node)
+    g.add_node("critic", _critic_node)
 
     # Fan-out: START -> all fetch nodes in parallel.
     for fn in fetch_names:
@@ -202,21 +216,24 @@ def build_graph(reset: bool = False):
     g.add_edge("retrieve", "report")
     g.add_edge("report", "evaluate")
 
-    # FEEDBACK LOOP (Build 2): evaluate decides whether to run ONE corrective
-    # pass. If weak -> correct -> END. If solid -> END. The `corrected` guard
-    # in _needs_correction ensures we never loop more than once.
+    # FEEDBACK LOOP (Build 2): evaluate -> (correct or straight to critic).
+    # Either way we pass through the critic node (which no-ops unless enabled),
+    # so the appraisal always sees the FINAL report. corrected guard prevents
+    # looping more than once.
     g.add_conditional_edges("evaluate", _needs_correction,
-                            {"correct": "correct", "done": END})
-    g.add_edge("correct", END)
+                            {"correct": "correct", "done": "critic"})
+    g.add_edge("correct", "critic")
+    g.add_edge("critic", END)
 
     return g.compile()
 
 
-def run(drug: str, reset: bool = False, depth: str = "medium") -> dict:
+def run(drug: str, reset: bool = False, depth: str = "medium", critic: bool = False) -> dict:
     """Run the full orchestrated pipeline for `drug` at the given depth."""
-    log.info(f"=== LANGGRAPH PIPELINE: {drug!r} (depth={depth}) ===")
+    log.info(f"=== LANGGRAPH PIPELINE: {drug!r} (depth={depth}"
+             + (", +critic" if critic else "") + ") ===")
     graph = build_graph(reset=reset)
     final = graph.invoke({"drug": drug, "depth": depth, "evidence": [], "combined": [],
                           "sections": {}, "report": "", "report_path": "",
-                          "verdict": {}, "corrected": False})
+                          "verdict": {}, "corrected": False, "critic": critic})
     return final

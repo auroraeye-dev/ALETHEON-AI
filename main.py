@@ -103,7 +103,7 @@ if __name__ == "__main__":
             return "detailed"
         return "medium"
 
-    FLAGS = {"--reset", "--short", "--detailed", "--medium"}
+    FLAGS = {"--reset", "--short", "--detailed", "--medium", "--critic"}
 
     if not args:
         healthcheck()
@@ -115,12 +115,13 @@ if __name__ == "__main__":
         search(" ".join(a for a in args[1:] if a not in FLAGS))
     elif args[0] == "flow" and len(args) > 1:
         # Full orchestrated pipeline (LangGraph): parallel fetch -> combine ->
-        # index -> retrieve -> report, all in one graph run.
+        # index -> retrieve -> report (-> evaluate/correct -> critic).
         from core.graph import run as run_flow
         reset = "--reset" in args
         depth = _parse_depth(args)
+        critic = "--critic" in args
         drug = next(a for a in args[1:] if a not in FLAGS)
-        result = run_flow(drug, reset=reset, depth=depth)
+        result = run_flow(drug, reset=reset, depth=depth, critic=critic)
         print("\n" + "=" * 70)
         print(result["report"])
         print("=" * 70)
