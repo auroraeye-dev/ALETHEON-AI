@@ -55,7 +55,9 @@ def _label_id(item: dict, idx: int) -> str:
     return sid or f"fda-{idx}"
 
 
-def fetch(drug: str, limit: int = 10) -> list[Evidence]:
+def fetch(drug: str, limit: int = None) -> list[Evidence]:
+    from core.config import config
+    limit = limit or config.FDA_MAX_LABELS
     """Search openFDA drug labels for `drug` and return Evidence (regulatory).
 
     Targets the drug-NAME fields (generic/brand) rather than a blanket text

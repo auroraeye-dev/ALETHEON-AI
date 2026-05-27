@@ -64,7 +64,9 @@ def _build_text(ps: dict) -> str:
     return "\n\n".join(parts).strip()
 
 
-def fetch(drug: str, page_size: int = 50) -> list[Evidence]:
+def fetch(drug: str, page_size: int = None) -> list[Evidence]:
+    from core.config import config
+    page_size = page_size or config.CLINICALTRIALS_PAGE_SIZE
     """Search ClinicalTrials.gov for `drug` and return trials as Evidence."""
     log.info(f"[clinicaltrials] searching for {drug!r} ...")
     params = {"query.term": drug, "pageSize": page_size}

@@ -56,6 +56,10 @@ def _dedup(chunks: list[dict]) -> list[dict]:
 # B1 — depth profiles. Each controls how many chunks each section pulls, which
 # is what actually drives report length: more retrieved evidence -> a longer
 # report that's still fully grounded (not padded/hallucinated).
+# B1 — depth profiles now live in config (E5) so they're tunable via .env
+# without editing code. These module-level defaults are kept as a fallback and
+# for reference, but retrieve_for_report reads config.depth_profiles() at call
+# time so env overrides take effect.
 DEPTH_PROFILES = {
     "short":    {"overview": 3, "safety": 4, "eff_pr": 2, "eff_reg": 2, "contra": 2, "preprint": 2,
                  "dosing": 2, "interactions": 2, "mechanism": 2, "populations": 2},
@@ -78,7 +82,8 @@ def retrieve_for_report(drug: str, depth: str = "medium", boost: dict = None) ->
       - Contradiction pull retrieves BOTH supportive and opposing evidence.
     """
     drug_key = drug.lower().strip()
-    prof = dict(DEPTH_PROFILES.get(depth, DEPTH_PROFILES["medium"]))
+    profiles = config.depth_profiles()
+    prof = dict(profiles.get(depth, profiles["medium"]))
     boost = boost or {}
     # Apply per-section boosts (corrective pass deepens weak sections).
     if boost.get("overview"):

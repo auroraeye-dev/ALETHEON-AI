@@ -61,7 +61,7 @@ def append_appraisal(drug: str, report_md: str) -> str:
                 {"role": "user", "content": CRITIC_TEMPLATE.format(
                     drug=drug, report=report_md)},
             ],
-            temperature=0.3,
+            temperature=config.CRITIC_TEMPERATURE,
         )
     except Exception as e:
         log.warning(f"[critic] failed: {e} — returning report unchanged")

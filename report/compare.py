@@ -106,7 +106,7 @@ def generate_comparison(drug1: str, sections1: dict, drug2: str, sections2: dict
                 tally1=_tier_tally(ordered1), tally2=_tier_tally(ordered2),
                 block1=block1, block2=block2)},
         ],
-        temperature=0.2,
+        temperature=config.LLM_TEMPERATURE,
     )
     # cost tracking
     try:

@@ -228,7 +228,7 @@ def generate_report(drug: str, sections: dict[str, list[dict]], depth: str = "me
                 tier_tally=_tier_tally(ordered),
                 tier_authority=TIER_AUTHORITY) + "\n\n" + guidance},
         ],
-        temperature=0.2,
+        temperature=config.LLM_TEMPERATURE,
     )
     # cost/speed tracking (E2)
     try:
