@@ -76,12 +76,28 @@ def _styles():
 
 def _inline_md(text: str) -> str:
     """Convert minimal inline markdown to reportlab markup; escape stray &<>."""
+    # First, neutralize any literal HTML tags that leaked in from source titles
+    # (e.g. a paper title containing "<sub>12</sub>"). Unescape entities first,
+    # then strip the tags, so we don't render raw "&lt;sub&gt;".
+    text = (text.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&"))
+    text = re.sub(r"</?(?:sub|sup|i|b|br|font|span)[^>]*>", "", text)
+
+    # Map Unicode subscript/superscript digits to ASCII (the PDF base fonts
+    # render them as black boxes otherwise — see PDF skill warning).
+    subs = "₀₁₂₃₄₅₆₇₈₉"; sups = "⁰¹²³⁴⁵⁶⁷⁸⁹"
+    for i, (lo, hi) in enumerate(zip(subs, sups)):
+        text = text.replace(lo, str(i)).replace(hi, str(i))
+    # A few other common offenders -> safe text
+    text = (text.replace("≥", ">=").replace("≤", "<=").replace("–", "-")
+                .replace("™", "(TM)").replace("\u2009", " "))
+
+    # Now re-escape for reportlab, then apply our own markup.
     text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     # bold **x**
     text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
-    # italic *x* (avoid touching already-handled)
+    # italic *x*
     text = re.sub(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", r"<i>\1</i>", text)
-    # citation tags [E#] -> small navy
+    # citation tags [E#]/[A#]/[B#] -> small navy
     text = re.sub(r"\[(E\d+)\]", r'<font color="#0d4e78">[\1]</font>', text)
     text = re.sub(r"\[([AB]\d+)\]", r'<font color="#0d4e78">[\1]</font>', text)
     return text
