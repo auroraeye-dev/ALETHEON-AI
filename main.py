@@ -10,6 +10,8 @@ Entry point for Aletheon.
 """
 
 import sys
+import os
+import re
 
 from core.models import Evidence, TIER_PEER_REVIEWED
 from core.config import config
@@ -101,7 +103,7 @@ def _dispatch(args):
             return "detailed"
         return "medium"
 
-    FLAGS = {"--reset", "--short", "--detailed", "--medium", "--critic"}
+    FLAGS = {"--reset", "--short", "--detailed", "--medium", "--critic", "--pdf"}
 
     if not args:
         healthcheck()
@@ -109,6 +111,19 @@ def _dispatch(args):
         from core.cache import clear
         n = clear()
         print(f"Cleared {n} cache entries.")
+    elif args[0] == "export" and len(args) > 1:
+        # B3 — convert an existing saved report markdown file to a branded PDF.
+        from report.export_pdf import markdown_to_pdf
+        md_path = next(a for a in args[1:] if a not in FLAGS)
+        if not os.path.exists(md_path):
+            from core.errors import AletheonError
+            raise AletheonError(f"Report file not found: {md_path}")
+        md = open(md_path).read()
+        m = re.search(r"# Aletheon Report:\s*(.+)", md)
+        drug = m.group(1).strip() if m else "report"
+        out = os.path.splitext(md_path)[0] + ".pdf"
+        markdown_to_pdf(md, drug, out)
+        print(f"\nPDF saved to: {out}\n")
     elif args[0] == "ingest" and len(args) > 1:
         reset = "--reset" in args
         drug = next(a for a in args[1:] if a not in FLAGS)
@@ -128,6 +143,12 @@ def _dispatch(args):
         print(result["report"])
         print("=" * 70)
         print(f"\nSaved to: {result['report_path']}\n")
+        # B3 — optional branded PDF export of this report.
+        if "--pdf" in args:
+            from report.export_pdf import markdown_to_pdf
+            pdf_path = os.path.splitext(result["report_path"])[0] + ".pdf"
+            markdown_to_pdf(result["report"], drug, pdf_path)
+            print(f"PDF saved to: {pdf_path}\n")
     elif args[0] == "compare" and len(args) > 2:
         # D1 — head-to-head comparison of two drugs.
         from core.graph import run as run_flow

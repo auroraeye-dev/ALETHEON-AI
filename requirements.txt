@@ -12,3 +12,5 @@ qdrant-client
 
 # Orchestration
 langgraph
+
+reportlab
