@@ -9,6 +9,7 @@ Batches requests so we never blow past limits (the Day-8 token work hardens this
 
 from openai import OpenAI
 
+import time
 from core.config import config
 from core.logging_setup import log
 
@@ -38,7 +39,23 @@ def embed_texts(texts: list[str], batch_size: int = 100) -> list[list[float]]:
         batch = texts[start:start + batch_size]
         log.info(f"[embed] embedding {len(batch)} chunks "
                  f"({start + len(batch)}/{len(texts)}) …")
-        resp = client.embeddings.create(model=config.EMBED_MODEL, input=batch)
+        # E4: retry transient API failures (rate limits, network blips) with
+        # simple backoff before giving up.
+        resp = None
+        last_err = None
+        for attempt in range(3):
+            try:
+                resp = client.embeddings.create(model=config.EMBED_MODEL, input=batch)
+                break
+            except Exception as e:
+                last_err = e
+                wait = 2 ** attempt  # 1s, 2s, 4s
+                log.warning(f"[embed] attempt {attempt + 1} failed ({e}); "
+                            f"retrying in {wait}s")
+                time.sleep(wait)
+        if resp is None:
+            from core.errors import PipelineError
+            raise PipelineError(f"Embedding failed after 3 attempts: {last_err}")
         vectors.extend(d.embedding for d in resp.data)
         # cost/speed tracking (E2): record token usage if the API reports it
         try:

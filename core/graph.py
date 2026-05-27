@@ -106,10 +106,23 @@ def _index_node(state: DrugState) -> dict:
     from core.chunk import chunk_all
     from core.embed import embed_texts
     from storage import vectorstore
+    from core.errors import NoEvidenceFound
 
     drug_key = state["drug"].lower().strip()
-    chunks = chunk_all(state["combined"], drug=drug_key)
-    log.info(f"[graph:index] {len(state['combined'])} evidence -> {len(chunks)} chunks")
+    combined = state.get("combined", [])
+    # E4: if every source came back empty, don't proceed to build an empty
+    # report — fail clearly so the user knows (likely a misspelled/unknown drug).
+    if not combined:
+        raise NoEvidenceFound(
+            f"No evidence found for {state['drug']!r} from any source. "
+            f"Check the spelling, or try a generic name (e.g. 'acetaminophen' "
+            f"instead of a brand).")
+    chunks = chunk_all(combined, drug=drug_key)
+    log.info(f"[graph:index] {len(combined)} evidence -> {len(chunks)} chunks")
+    if not chunks:
+        raise NoEvidenceFound(
+            f"Evidence for {state['drug']!r} could not be processed into "
+            f"searchable chunks.")
     vectors = embed_texts([c.text for c in chunks])
     vectorstore.index_chunks(chunks, vectors)
     return {}
@@ -230,11 +243,25 @@ def build_graph(reset: bool = False):
 
 
 def run(drug: str, reset: bool = False, depth: str = "medium", critic: bool = False) -> dict:
-    """Run the full orchestrated pipeline for `drug` at the given depth."""
+    """Run the full orchestrated pipeline for `drug` at the given depth.
+
+    Raises AletheonError subclasses (InvalidDrugName, NoEvidenceFound,
+    PipelineError) on expected failure modes so the CLI can show a clean
+    message instead of a stack trace.
+    """
+    from core.errors import validate_drug_name, AletheonError, PipelineError
+    drug = validate_drug_name(drug)  # may raise InvalidDrugName
+
     log.info(f"=== LANGGRAPH PIPELINE: {drug!r} (depth={depth}"
              + (", +critic" if critic else "") + ") ===")
-    graph = build_graph(reset=reset)
-    final = graph.invoke({"drug": drug, "depth": depth, "evidence": [], "combined": [],
-                          "sections": {}, "report": "", "report_path": "",
-                          "verdict": {}, "corrected": False, "critic": critic})
+    try:
+        graph = build_graph(reset=reset)
+        final = graph.invoke({"drug": drug, "depth": depth, "evidence": [], "combined": [],
+                              "sections": {}, "report": "", "report_path": "",
+                              "verdict": {}, "corrected": False, "critic": critic})
+    except AletheonError:
+        raise  # already a clean, typed error — let the CLI format it
+    except Exception as e:
+        # Wrap any unexpected failure so the CLI shows a clean message.
+        raise PipelineError(f"Pipeline failed while processing {drug!r}: {e}") from e
     return final

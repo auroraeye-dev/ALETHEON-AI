@@ -93,9 +93,7 @@ def run_pipeline(drug: str, depth: str = "medium"):
     print(f"\nSaved to: {path}\n")
 
 
-if __name__ == "__main__":
-    args = sys.argv[1:]
-
+def _dispatch(args):
     def _parse_depth(arglist):
         if "--short" in arglist:
             return "short"
@@ -156,3 +154,17 @@ if __name__ == "__main__":
         depth = _parse_depth(args)
         drug = next(a for a in args if a not in FLAGS)
         run_pipeline(drug, depth=depth)
+
+
+if __name__ == "__main__":
+    args = sys.argv[1:]
+    # E4: catch expected errors and show a clean message instead of a traceback.
+    from core.errors import AletheonError
+    try:
+        _dispatch(args)
+    except AletheonError as e:
+        print(f"\n⚠️  {e}\n")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        print("\nInterrupted.\n")
+        sys.exit(130)
