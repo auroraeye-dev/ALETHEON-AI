@@ -26,3 +26,6 @@ F. Intelligence Depth (the differentiators)
 F1 — Numeric confidence scoring. Beyond High/Med/Low — a computed score with a formula. Medium value (but risks false precision — we discussed this), medium effort.
 F2 — Evidence traceability graph. Claim → paragraph → paper → dataset chain (from your improvements doc). High value, high effort — likely Build 2/3.
 F3 — Statistical inference layer. Effect sizes, confidence intervals, meta-analysis math. High value, high effort — Build 2/3.
+1. sandbox and server code execution rm -rf or other lethal trifecta
+2. explicit content asking
+3. using nlp to give work to llm

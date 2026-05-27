@@ -213,18 +213,35 @@ def generate_report(drug: str, sections: dict[str, list[dict]], depth: str = "me
         pass
     body = resp.choices[0].message.content
 
-    # Sources list from the deduped, tagged chunks.
+    # Sources list — deduped by SOURCE DOCUMENT (A3). One evidence document can
+    # be split into several chunks, each with its own [E#] tag for in-text
+    # citation. We keep those tags valid, but collapse the visible Sources list
+    # so each real document appears ONCE, showing all the tags that point to it.
     sources_lines = ["\n## Sources\n"]
+    by_doc = {}          # (source, source_id) -> {tags, title, tier, url}
+    doc_order = []
     for c in ordered:
+        key = (c["source"], c["source_id"])
+        if key not in by_doc:
+            by_doc[key] = {"tags": [], "title": c["title"], "tier": c["tier"],
+                           "url": c["url"], "source": c["source"],
+                           "source_id": c["source_id"]}
+            doc_order.append(key)
+        by_doc[key]["tags"].append(c["tag"])
+    for key in doc_order:
+        d = by_doc[key]
+        tag_str = "".join(f"[{t}]" for t in d["tags"])
         sources_lines.append(
-            f"- **[{c['tag']}]** ({c['tier']}) {c['title']} — "
-            f"{c['source']}:{c['source_id']}  \n  {c['url']}"
+            f"- **{tag_str}** ({d['tier']}) {d['title']} — "
+            f"{d['source']}:{d['source_id']}  \n  {d['url']}"
         )
     sources = "\n".join(sources_lines)
+    n_docs = len(doc_order)
 
     header = (f"# Aletheon Report: {drug}\n\n"
               f"_Generated {datetime.now():%Y-%m-%d %H:%M} · "
-              f"{len(ordered)} evidence chunks (section-targeted, {depth}) · "
+              f"{len(ordered)} evidence chunks from {n_docs} sources "
+              f"(section-targeted, {depth}) · "
               f"grounded in retrieved sources only_\n\n")
 
     return header + body + "\n" + sources

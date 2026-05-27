@@ -119,13 +119,26 @@ def generate_comparison(drug1: str, sections1: dict, drug2: str, sections2: dict
         pass
     body = resp.choices[0].message.content
 
-    # Combined sources list, both drugs.
-    src = ["\n## Sources\n", f"\n**{drug1}:**"]
-    for c in ordered1:
-        src.append(f"- **[{c['tag']}]** ({c['tier']}) {c['title']} — {c['source']}:{c['source_id']}")
-    src.append(f"\n**{drug2}:**")
-    for c in ordered2:
-        src.append(f"- **[{c['tag']}]** ({c['tier']}) {c['title']} — {c['source']}:{c['source_id']}")
+    # Combined sources list, both drugs — deduped by source document (A3).
+    def _doc_lines(ordered):
+        by_doc, order = {}, []
+        for c in ordered:
+            key = (c["source"], c["source_id"])
+            if key not in by_doc:
+                by_doc[key] = {"tags": [], "title": c["title"], "tier": c["tier"],
+                               "source": c["source"], "source_id": c["source_id"]}
+                order.append(key)
+            by_doc[key]["tags"].append(c["tag"])
+        out = []
+        for key in order:
+            d = by_doc[key]
+            tag_str = "".join(f"[{t}]" for t in d["tags"])
+            out.append(f"- **{tag_str}** ({d['tier']}) {d['title']} — "
+                       f"{d['source']}:{d['source_id']}")
+        return out
+
+    src = ["\n## Sources\n", f"\n**{drug1}:**"] + _doc_lines(ordered1)
+    src += [f"\n**{drug2}:**"] + _doc_lines(ordered2)
 
     header = (f"# Aletheon Comparison: {drug1} vs {drug2}\n\n"
               f"_Generated {datetime.now():%Y-%m-%d %H:%M} · "
