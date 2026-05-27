@@ -132,20 +132,43 @@ def retrieve_for_report(drug: str, depth: str = "medium", boost: dict = None) ->
     log.info(f"[retrieve:preprint] {len(out['preprint'])} preprint chunks")
 
     # B2 — richer structure. Dedicated retrieval for monograph-style sections.
-    # These pull mostly from regulatory + peer-reviewed evidence (the semantic
-    # chunker already tags label sections like DOSAGE / DRUG INTERACTIONS /
-    # USE IN SPECIFIC POPULATIONS, so the right chunks surface here). Each is
-    # surfaced as its own section ONLY if real evidence comes back.
-    b2_queries = {
-        "dosing":       f"{drug} dosage administration recommended dose mg how to take frequency maximum",
-        "interactions": f"{drug} drug interactions concomitant use avoid combination anticoagulants",
-        "mechanism":    f"{drug} mechanism of action how it works pharmacology clinical pharmacology",
-        "populations":  f"{drug} use in specific populations pregnancy elderly geriatric pediatric renal hepatic impairment",
+    # KEY: we first pull chunks the semantic chunker already TAGGED with the
+    # matching label section (high precision — a real "mechanism of action"
+    # chunk), then top up with a plain semantic query if needed. This is what
+    # makes Mechanism / Interactions / Populations reliably surface as their
+    # own sections instead of getting folded into Safety/Overview.
+    b2_specs = {
+        "dosing": {
+            "query": f"{drug} dosage administration recommended dose mg frequency maximum",
+            "sections": ["dosage and administration", "dosage", "how supplied"],
+        },
+        "interactions": {
+            "query": f"{drug} drug interactions concomitant use avoid combination",
+            "sections": ["drug interactions", "drug interaction"],
+        },
+        "mechanism": {
+            "query": f"{drug} mechanism of action how it works pharmacology",
+            "sections": ["mechanism of action", "clinical pharmacology"],
+        },
+        "populations": {
+            "query": f"{drug} use in specific populations pregnancy elderly pediatric renal hepatic",
+            "sections": ["use in specific populations", "use in specific population"],
+        },
     }
-    for section, q in b2_queries.items():
-        qvec = embed_query(q)
-        hits = vectorstore.search(qvec, top_k=prof[section], drug=drug_key)
-        out[section] = _hits_to_dicts(hits)
-        log.info(f"[retrieve:{section}] {len(out[section])} chunks")
+    for section, spec in b2_specs.items():
+        k = prof[section]
+        qvec = embed_query(spec["query"])
+        # Pass 1: section-tagged chunks (precise).
+        tagged = _hits_to_dicts(
+            vectorstore.search(qvec, top_k=k, drug=drug_key, section=spec["sections"]))
+        results = tagged
+        # Pass 2: if the label-tagged pull was thin, top up with a plain query.
+        if len(tagged) < k:
+            extra = _hits_to_dicts(
+                vectorstore.search(qvec, top_k=k, drug=drug_key))
+            results = _dedup(tagged + extra)[:k]
+        out[section] = results
+        log.info(f"[retrieve:{section}] {len(out[section])} chunks "
+                 f"({len(tagged)} section-tagged)")
 
     return out

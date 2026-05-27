@@ -16,7 +16,7 @@ import uuid
 import atexit
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
+from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue, MatchAny
 
 from core.config import config
 from core.embed import EMBED_DIM
@@ -93,8 +93,10 @@ def index_chunks(chunks: list[Chunk], vectors: list[list[float]]):
     log.info(f"[qdrant] indexed {len(points)} chunks")
 
 
-def search(query_vector: list[float], top_k: int = None, tier: str = None, drug: str = None):
-    """Return the top_k most similar chunks. Optionally filter by tier and/or drug."""
+def search(query_vector: list[float], top_k: int = None, tier: str = None,
+           drug: str = None, section=None):
+    """Return the top_k most similar chunks. Optionally filter by tier, drug,
+    and/or section. `section` may be a string or a list of acceptable sections."""
     client = _get_client()
     top_k = top_k or config.RETRIEVE_TOP_K
     conditions = []
@@ -102,6 +104,12 @@ def search(query_vector: list[float], top_k: int = None, tier: str = None, drug:
         conditions.append(FieldCondition(key="tier", match=MatchValue(value=tier)))
     if drug:
         conditions.append(FieldCondition(key="drug", match=MatchValue(value=drug)))
+    if section:
+        if isinstance(section, (list, tuple, set)):
+            conditions.append(FieldCondition(key="section",
+                                             match=MatchAny(any=list(section))))
+        else:
+            conditions.append(FieldCondition(key="section", match=MatchValue(value=section)))
     qfilter = Filter(must=conditions) if conditions else None
     hits = client.query_points(
         collection_name=config.QDRANT_COLLECTION,

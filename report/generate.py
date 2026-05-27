@@ -156,8 +156,9 @@ interactions and what to avoid, bulleted, cited. If no interaction evidence was 
 provided, OMIT this section entirely.
 
 ## Mechanism of Action
-ONLY if MECHANISM OF ACTION evidence is provided above. Briefly explain how the \
-drug works, cited. If no mechanism evidence was provided, OMIT this section entirely.
+ONLY if MECHANISM OF ACTION evidence is provided above. When it IS provided, you \
+MUST create this section and explain how the drug works here (do not fold this \
+into the Summary), cited. If no mechanism evidence was provided, OMIT this section entirely.
 
 ## Use in Specific Populations
 ONLY if USE IN SPECIFIC POPULATIONS evidence is provided above. Summarize guidance \
