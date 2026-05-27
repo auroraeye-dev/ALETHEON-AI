@@ -66,8 +66,13 @@ def _evidence_block(section_tags: dict, ordered: list[dict]) -> str:
         "safety": "SAFETY evidence",
         "contradiction": "CONTRADICTION-CHECK evidence (both supportive AND opposing — compare these for conflicts)",
         "preprint": "PREPRINT evidence (NOT peer-reviewed)",
+        "dosing": "DOSING & ADMINISTRATION evidence",
+        "interactions": "DRUG INTERACTIONS evidence",
+        "mechanism": "MECHANISM OF ACTION evidence",
+        "populations": "USE IN SPECIFIC POPULATIONS evidence",
     }
-    for section in ["overview", "efficacy", "safety", "contradiction", "preprint"]:
+    for section in ["overview", "efficacy", "safety", "dosing", "interactions",
+                    "mechanism", "populations", "contradiction", "preprint"]:
         tags = section_tags.get(section, [])
         if not tags:
             continue
@@ -140,6 +145,25 @@ After EACH finding, append its confidence tag: \
 ## Safety / Warnings
 Adverse effects, contraindications, risks (use SAFETY evidence), bulleted, cited.
 
+## Dosing & Administration
+ONLY if DOSING & ADMINISTRATION evidence is provided above. Summarize recommended \
+doses, routes, frequency, and max limits, bulleted, cited. If no dosing evidence \
+was provided, OMIT this section entirely (do not write the header).
+
+## Drug Interactions
+ONLY if DRUG INTERACTIONS evidence is provided above. Summarize notable \
+interactions and what to avoid, bulleted, cited. If no interaction evidence was \
+provided, OMIT this section entirely.
+
+## Mechanism of Action
+ONLY if MECHANISM OF ACTION evidence is provided above. Briefly explain how the \
+drug works, cited. If no mechanism evidence was provided, OMIT this section entirely.
+
+## Use in Specific Populations
+ONLY if USE IN SPECIFIC POPULATIONS evidence is provided above. Summarize guidance \
+for pregnancy, elderly, pediatric, and renal/hepatic impairment, cited. If no such \
+evidence was provided, OMIT this section entirely.
+
 ## Contradictions & Disagreements
 Examine the CONTRADICTION-CHECK evidence (and all other evidence) for points where \
 findings conflict — e.g. one source reports benefit, another reports no effect or \
@@ -150,7 +174,10 @@ write "No direct contradictions found in current sources."
 ONLY from PREPRINT evidence. Flag as not peer-reviewed. If none, write \
 "No preprint evidence in current sources."
 
-Cite using [E#] tags only. Do not add other sections."""
+Cite using [E#] tags only. For the optional monograph sections (Dosing, Drug \
+Interactions, Mechanism of Action, Use in Specific Populations), include a section \
+ONLY when its evidence block was provided — otherwise omit that header completely. \
+Do not add any sections beyond those listed."""
 
 
 # B1 — length guidance injected per depth. This shapes HOW MUCH the LLM writes

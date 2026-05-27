@@ -57,9 +57,12 @@ def _dedup(chunks: list[dict]) -> list[dict]:
 # is what actually drives report length: more retrieved evidence -> a longer
 # report that's still fully grounded (not padded/hallucinated).
 DEPTH_PROFILES = {
-    "short":    {"overview": 3, "safety": 4, "eff_pr": 2, "eff_reg": 2, "contra": 2, "preprint": 2},
-    "medium":   {"overview": 8, "safety": 8, "eff_pr": 5, "eff_reg": 4, "contra": 4, "preprint": 5},
-    "detailed": {"overview": 14, "safety": 16, "eff_pr": 10, "eff_reg": 8, "contra": 8, "preprint": 8},
+    "short":    {"overview": 3, "safety": 4, "eff_pr": 2, "eff_reg": 2, "contra": 2, "preprint": 2,
+                 "dosing": 2, "interactions": 2, "mechanism": 2, "populations": 2},
+    "medium":   {"overview": 8, "safety": 8, "eff_pr": 5, "eff_reg": 4, "contra": 4, "preprint": 5,
+                 "dosing": 4, "interactions": 4, "mechanism": 3, "populations": 4},
+    "detailed": {"overview": 14, "safety": 16, "eff_pr": 10, "eff_reg": 8, "contra": 8, "preprint": 8,
+                 "dosing": 6, "interactions": 6, "mechanism": 5, "populations": 6},
 }
 
 
@@ -127,5 +130,22 @@ def retrieve_for_report(drug: str, depth: str = "medium", boost: dict = None) ->
     pre_hits = vectorstore.search(qvec, top_k=prof["preprint"], tier="preprint", drug=drug_key)
     out["preprint"] = _hits_to_dicts(pre_hits)
     log.info(f"[retrieve:preprint] {len(out['preprint'])} preprint chunks")
+
+    # B2 — richer structure. Dedicated retrieval for monograph-style sections.
+    # These pull mostly from regulatory + peer-reviewed evidence (the semantic
+    # chunker already tags label sections like DOSAGE / DRUG INTERACTIONS /
+    # USE IN SPECIFIC POPULATIONS, so the right chunks surface here). Each is
+    # surfaced as its own section ONLY if real evidence comes back.
+    b2_queries = {
+        "dosing":       f"{drug} dosage administration recommended dose mg how to take frequency maximum",
+        "interactions": f"{drug} drug interactions concomitant use avoid combination anticoagulants",
+        "mechanism":    f"{drug} mechanism of action how it works pharmacology clinical pharmacology",
+        "populations":  f"{drug} use in specific populations pregnancy elderly geriatric pediatric renal hepatic impairment",
+    }
+    for section, q in b2_queries.items():
+        qvec = embed_query(q)
+        hits = vectorstore.search(qvec, top_k=prof[section], drug=drug_key)
+        out[section] = _hits_to_dicts(hits)
+        log.info(f"[retrieve:{section}] {len(out[section])} chunks")
 
     return out
