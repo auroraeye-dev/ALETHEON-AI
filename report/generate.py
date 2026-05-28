@@ -10,6 +10,7 @@ citations resolve, and we dedup so the same chunk isn't shown twice.
 """
 
 import os
+import re
 from datetime import datetime
 
 from openai import OpenAI
@@ -172,8 +173,11 @@ harm. Surface each conflict with both sides cited. If genuinely none conflict, \
 write "No direct contradictions found in current sources."
 
 ## Preprint / Emerging Evidence (not yet peer-reviewed)
-ONLY from PREPRINT evidence. Flag as not peer-reviewed. If none, write \
-"No preprint evidence in current sources."
+Use ONLY the PREPRINT evidence, flagged as not peer-reviewed. IMPORTANT: either \
+list preprint findings OR write exactly "No preprint evidence in current sources." \
+— NEVER both. If you write any preprint bullet, do NOT also write the \
+"No preprint evidence" line. Only write that line when there is genuinely no \
+preprint evidence at all.
 
 Cite using [E#] tags only. For the optional monograph sections (Dosing, Drug \
 Interactions, Mechanism of Action, Use in Specific Populations), include a section \
@@ -204,6 +208,24 @@ DEPTH_GUIDANCE = {
         "evidence; if evidence is thin, say so rather than padding."
     ),
 }
+
+
+def _fix_preprint_fallback(md: str) -> str:
+    """If the Preprint section has real bullets, remove any stray
+    'No preprint evidence...' fallback line (they're mutually exclusive)."""
+    m = re.search(r"(## Preprint / Emerging Evidence[^\n]*\n)(.*?)(?=\n## |\Z)",
+                  md, flags=re.S)
+    if not m:
+        return md
+    header, sec = m.group(1), m.group(2)
+    has_bullets = bool(re.search(r"^\s*[-*]\s+\S", sec, flags=re.M))
+    has_fallback = "no preprint evidence" in sec.lower()
+    if has_bullets and has_fallback:
+        cleaned = "\n".join(
+            ln for ln in sec.splitlines()
+            if "no preprint evidence" not in ln.lower())
+        md = md[:m.start()] + header + cleaned + md[m.end():]
+    return md
 
 
 def generate_report(drug: str, sections: dict[str, list[dict]], depth: str = "medium") -> str:
@@ -240,6 +262,12 @@ def generate_report(drug: str, sections: dict[str, list[dict]], depth: str = "me
     except Exception:
         pass
     body = resp.choices[0].message.content
+
+    # Safeguard: the model occasionally emits BOTH preprint bullets AND the
+    # "No preprint evidence" fallback line in the Preprint section, which
+    # contradicts itself. If the preprint section has any real content, strip
+    # the stray fallback line so the report can never self-contradict.
+    body = _fix_preprint_fallback(body)
 
     # Sources list — deduped by SOURCE DOCUMENT (A3). One evidence document can
     # be split into several chunks, each with its own [E#] tag for in-text
