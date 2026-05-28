@@ -56,7 +56,10 @@ def fetch(drug: str, page_size: int = None) -> list[Evidence]:
         "format": "json",
         "pageSize": page_size,
         "resultType": "core",   # includes abstractText
-        "sort": "RELEVANCE",
+        # NOTE: do NOT send sort="RELEVANCE" — Europe PMC's API rejects that
+        # token now and returns hitCount=0. Omitting sort defaults to relevance
+        # ranking, which is what we want. (Diagnosed: bare query => 68k hits,
+        # sort=RELEVANCE => 0 hits.)
     }
 
     data = None
