@@ -142,6 +142,10 @@ Write a Markdown report with EXACTLY these sections:
 Most important efficacy/clinical points (use EFFICACY evidence), bulleted, cited.
 After EACH finding, append its confidence tag: \
 **(Confidence: High|Medium|Low — reason)**.
+IMPORTANT: Key Findings must draw ONLY from peer-reviewed and regulatory evidence. \
+Do NOT place preprint findings here — preprints belong ONLY in the "Preprint / \
+Emerging Evidence" section below. If a point is supported only by a preprint, leave \
+it out of Key Findings.
 
 ## Safety / Warnings
 Adverse effects, contraindications, risks (use SAFETY evidence), bulleted, cited.
@@ -228,8 +232,13 @@ def _fix_preprint_fallback(md: str) -> str:
     return md
 
 
-def generate_report(drug: str, sections: dict[str, list[dict]], depth: str = "medium") -> str:
-    """Generate the cited report from section-targeted evidence, at the given depth."""
+def generate_report(drug: str, sections: dict[str, list[dict]], depth: str = "medium",
+                    appendices: set | None = None) -> str:
+    """Generate the cited report from section-targeted evidence, at the given depth.
+
+    appendices: optional set of {"trace", "stats"} to append F2 traceability and/or
+    F3 reported-statistics sections. None/empty keeps the standard clean report.
+    """
     section_tags, ordered = _merge_and_tag(sections)
     if not ordered:
         return f"# Aletheon Report: {drug}\n\n_No evidence retrieved._\n"
@@ -300,7 +309,32 @@ def generate_report(drug: str, sections: dict[str, list[dict]], depth: str = "me
               f"(section-targeted, {depth}) · "
               f"grounded in retrieved sources only_\n\n")
 
-    return header + body + "\n" + sources
+    report_md = header + body + "\n" + sources
+
+    # F2/F3 optional appendices. Off by default so the standard report stays
+    # clean; enabled via --trace (traceability) and --stats (reported stats).
+    if appendices:
+        # Build the [E#] -> source index from the same `ordered` chunks.
+        evidence_index = {c["tag"]: {
+            "source": c["source"], "source_id": c["source_id"],
+            "tier": c["tier"], "title": c["title"], "url": c["url"],
+        } for c in ordered}
+
+        if "stats" in appendices:
+            from report.stats_extract import extract_from_evidence, format_stats_markdown
+            stats = extract_from_evidence(ordered)
+            block = format_stats_markdown(stats)
+            if block:
+                report_md += "\n\n" + block
+
+        if "trace" in appendices:
+            from report.traceability import build_traceability, format_traceability_markdown
+            trace = build_traceability(report_md, evidence_index)
+            block = format_traceability_markdown(trace)
+            if block:
+                report_md += "\n\n" + block
+
+    return report_md
 
 
 def save_report(drug: str, report_md: str) -> str:

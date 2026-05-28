@@ -56,6 +56,8 @@ class DrugState(TypedDict):
     corrected: bool
     # critic agent (D2): opt-in additive appraisal
     critic: bool
+    # F2/F3: optional appendices to append {"trace","stats"}; None = clean report
+    appendices: set
 
 
 # ---- NODES (each wraps an existing agent; no agent logic changes) ------
@@ -137,7 +139,8 @@ def _retrieve_node(state: DrugState) -> dict:
 def _report_node(state: DrugState) -> dict:
     from report.generate import generate_report, save_report
     report_md = generate_report(state["drug"], state["sections"],
-                                depth=state.get("depth", "medium"))
+                                depth=state.get("depth", "medium"),
+                                appendices=state.get("appendices"))
     path = save_report(state["drug"], report_md)
     return {"report": report_md, "report_path": path}
 
@@ -242,7 +245,8 @@ def build_graph(reset: bool = False):
     return g.compile()
 
 
-def run(drug: str, reset: bool = False, depth: str = "medium", critic: bool = False) -> dict:
+def run(drug: str, reset: bool = False, depth: str = "medium", critic: bool = False,
+        appendices: set | None = None) -> dict:
     """Run the full orchestrated pipeline for `drug` at the given depth.
 
     Raises AletheonError subclasses (InvalidDrugName, NoEvidenceFound,
@@ -258,7 +262,8 @@ def run(drug: str, reset: bool = False, depth: str = "medium", critic: bool = Fa
         graph = build_graph(reset=reset)
         final = graph.invoke({"drug": drug, "depth": depth, "evidence": [], "combined": [],
                               "sections": {}, "report": "", "report_path": "",
-                              "verdict": {}, "corrected": False, "critic": critic})
+                              "verdict": {}, "corrected": False, "critic": critic,
+                              "appendices": appendices})
     except AletheonError:
         raise  # already a clean, typed error — let the CLI format it
     except Exception as e:

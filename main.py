@@ -103,7 +103,8 @@ def _dispatch(args):
             return "detailed"
         return "medium"
 
-    FLAGS = {"--reset", "--short", "--detailed", "--medium", "--critic", "--pdf"}
+    FLAGS = {"--reset", "--short", "--detailed", "--medium", "--critic", "--pdf",
+             "--trace", "--stats"}
 
     if not args:
         healthcheck()
@@ -138,7 +139,13 @@ def _dispatch(args):
         depth = _parse_depth(args)
         critic = "--critic" in args
         drug = next(a for a in args[1:] if a not in FLAGS)
-        result = run_flow(drug, reset=reset, depth=depth, critic=critic)
+        appendices = set()
+        if "--trace" in args:
+            appendices.add("trace")
+        if "--stats" in args:
+            appendices.add("stats")
+        result = run_flow(drug, reset=reset, depth=depth, critic=critic,
+                          appendices=appendices or None)
         print("\n" + "=" * 70)
         print(result["report"])
         print("=" * 70)
