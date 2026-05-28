@@ -38,6 +38,7 @@ class Config:
     CLINICALTRIALS_PAGE_SIZE = int(os.getenv("CLINICALTRIALS_PAGE_SIZE", "50"))
     EUROPEPMC_PAGE_SIZE = int(os.getenv("EUROPEPMC_PAGE_SIZE", "40"))
     FAERS_TOP_N = int(os.getenv("FAERS_TOP_N", "25"))
+    DAILYMED_MAX_LABELS = int(os.getenv("DAILYMED_MAX_LABELS", "3"))
 
     # LLM sampling temperature for report / comparison / critic generation.
     LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.2"))

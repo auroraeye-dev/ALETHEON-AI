@@ -147,11 +147,21 @@ def chunk_evidence(ev: Evidence, drug: str = "") -> list[Chunk]:
     # Prepend the title so the topic is always in-context for the first chunk.
     body = f"{ev.title}\n\n{ev.text}" if ev.title else ev.text
     pieces = _semantic_split(body)
+    # Some sources (e.g. DailyMed) already KNOW the section this evidence came
+    # from and pass it in ev.extra["section"]. Use that as a fallback label when
+    # the text-based header detection didn't find one — so monograph sections
+    # (mechanism / interactions / populations) get tagged reliably for B2.
+    hint = ""
+    try:
+        hint = (ev.extra or {}).get("section", "") or ""
+    except Exception:
+        hint = ""
     chunks = []
     for i, (section, piece) in enumerate(pieces):
+        sec = section or hint
         # Prepend the section label to the chunk text so retrieval embeddings
         # "know" this is e.g. a warnings chunk — cheap context, big precision win.
-        text = f"[{section}] {piece}" if section else piece
+        text = f"[{sec}] {piece}" if sec else piece
         chunks.append(Chunk(
             text=text,
             source=ev.source,
@@ -162,7 +172,7 @@ def chunk_evidence(ev: Evidence, drug: str = "") -> list[Chunk]:
             doc_type=ev.doc_type,
             chunk_index=i,
             drug=drug,
-            section=section,
+            section=sec,
         ))
     return chunks
 
