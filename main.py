@@ -131,6 +131,44 @@ def _dispatch(args):
         ingest(drug, reset=reset)
     elif args[0] == "search" and len(args) > 1:
         search(" ".join(a for a in args[1:] if a not in FLAGS))
+    elif args[0] == "ask" and len(args) > 1:
+        # Natural-language entry point (also what a web portal would call):
+        # "ask 'detailed report on aspirin vs ibuprofen'" -> gateway parses
+        # intent (drug(s), single/compare, depth) and safety-screens the input.
+        from core.gateway import interpret
+        raw = " ".join(a for a in args[1:] if a not in FLAGS)
+        intent = interpret(raw)  # raises InputRejected (caught by _dispatch) if unsafe
+        from core.graph import run as run_flow
+        appendices = set()
+        if "--trace" in args:
+            appendices.add("trace")
+        if "--stats" in args:
+            appendices.add("stats")
+        if intent["mode"] == "compare":
+            from core.retrieve import retrieve_for_report
+            from report.compare import generate_comparison, save_comparison
+            d1, d2 = intent["drugs"][0], intent["drugs"][1]
+            log.info(f"=== ASK -> COMPARE: {d1} vs {d2} (depth={intent['depth']}) ===")
+            run_flow(d1, reset=("--reset" in args), depth=intent["depth"])
+            run_flow(d2, reset=False, depth=intent["depth"])
+            s1 = retrieve_for_report(d1, depth=intent["depth"])
+            s2 = retrieve_for_report(d2, depth=intent["depth"])
+            md = generate_comparison(d1, s1, d2, s2)
+            path = save_comparison(d1, d2, md)
+            print("\n" + "=" * 70 + "\n" + md + "\n" + "=" * 70)
+            print(f"\nSaved to: {path}\n")
+        else:
+            drug = intent["drugs"][0]
+            log.info(f"=== ASK -> FLOW: {drug} (depth={intent['depth']}) ===")
+            result = run_flow(drug, reset=("--reset" in args), depth=intent["depth"],
+                              appendices=appendices or None)
+            print("\n" + "=" * 70 + "\n" + result["report"] + "\n" + "=" * 70)
+            print(f"\nSaved to: {result['report_path']}\n")
+            if "--pdf" in args:
+                from report.export_pdf import markdown_to_pdf
+                pdf_path = os.path.splitext(result["report_path"])[0] + ".pdf"
+                markdown_to_pdf(result["report"], drug, pdf_path)
+                print(f"PDF saved to: {pdf_path}\n")
     elif args[0] == "flow" and len(args) > 1:
         # Full orchestrated pipeline (LangGraph): parallel fetch -> combine ->
         # index -> retrieve -> report (-> evaluate/correct -> critic).
