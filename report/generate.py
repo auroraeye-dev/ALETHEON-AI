@@ -153,7 +153,12 @@ Adverse effects, contraindications, risks (use SAFETY evidence), bulleted, cited
 ## Dosing & Administration
 ONLY if DOSING & ADMINISTRATION evidence is provided above. Summarize recommended \
 doses, routes, frequency, and max limits, bulleted, cited. If no dosing evidence \
-was provided, OMIT this section entirely (do not write the header).
+was provided, OMIT this section entirely (do not write the header). \
+SANITY CHECK every dose you write: oral OTC analgesics are NOT dosed at dozens of \
+tablets per day — if the evidence seems to imply an implausibly high count (e.g. \
+more than ~12 tablets/day), you have likely misread a label table; re-read it and \
+state the correct, plausible limit, and ensure the adult maximum is never wildly \
+higher than the elderly maximum.
 
 ## Drug Interactions
 ONLY if DRUG INTERACTIONS evidence is provided above. Summarize notable \
@@ -310,6 +315,15 @@ def generate_report(drug: str, sections: dict[str, list[dict]], depth: str = "me
               f"grounded in retrieved sources only_\n\n")
 
     report_md = header + body + "\n" + sources
+
+    # Numeric sanity guardrail (always on) — flag dangerous/implausible dosing
+    # figures (e.g. an LLM misreading "8 tablets/day" as "48 tablets/day"). We
+    # annotate rather than silently rewrite, since we don't invent the right dose.
+    from report.sanity import check_report
+    report_md, sanity_warnings = check_report(report_md)
+    if sanity_warnings:
+        for w in sanity_warnings:
+            log.warning(f"[sanity] {w}")
 
     # F2/F3 optional appendices. Off by default so the standard report stays
     # clean; enabled via --trace (traceability) and --stats (reported stats).
