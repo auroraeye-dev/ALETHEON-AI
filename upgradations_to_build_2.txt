@@ -29,3 +29,11 @@ F3 — Statistical inference layer. Effect sizes, confidence intervals, meta-ana
 1. sandbox and server code execution rm -rf or other lethal trifecta
 2. explicit content asking
 3. using nlp to give work to llm
+4. hi how are you working
+5. The web frontend, when you build it, calls only ask. No flow endpoint exposed publicly. The backend can keep the flow code path internally — just don't surface it via the API layer.
+Eval harness should still use flow — that's correct, because evals need deterministic input (the exact drug name, exact depth) and no gateway interpretation. So flow keeps a real internal purpose beyond debugging.
+6. asking how many papers to screen pro, user get more
+7. more data sources
+8. diagrams
+9. correlation with ncbi gene bank. genes
+10, use of alphafold 

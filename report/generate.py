@@ -316,6 +316,22 @@ def generate_report(drug: str, sections: dict[str, list[dict]], depth: str = "me
 
     report_md = header + body + "\n" + sources
 
+    # Retraction-Watch / Crossref check on the cited evidence. If any cited
+    # paper has been retracted/corrected/flagged, surface that prominently —
+    # it's exactly the kind of issue our brand promise is built on catching.
+    try:
+        from report.retraction_check import check_evidence, format_retraction_block
+        issues = check_evidence(ordered)
+        if issues:
+            block = format_retraction_block(issues)
+            # insert BEFORE Sources so it's prominent, not buried in an appendix
+            report_md = report_md.replace("## Sources",
+                                          block + "\n\n## Sources", 1)
+            log.warning(f"[report] {len(issues)} retraction/correction flag(s) "
+                        f"surfaced in the report")
+    except Exception as e:
+        log.warning(f"[report] retraction check skipped: {e}")
+
     # Numeric sanity guardrail (always on) — flag dangerous/implausible dosing
     # figures (e.g. an LLM misreading "8 tablets/day" as "48 tablets/day"). We
     # annotate rather than silently rewrite, since we don't invent the right dose.

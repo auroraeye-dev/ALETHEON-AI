@@ -138,6 +138,15 @@ def _dispatch(args):
         from core.gateway import interpret
         raw = " ".join(a for a in args[1:] if a not in FLAGS)
         intent = interpret(raw)  # raises InputRejected (caught by _dispatch) if unsafe
+        # Allow explicit CLI depth flags to OVERRIDE the gateway's parsed depth.
+        # ("ask 'compare X and Y' --detailed" should force detailed, even if the
+        # sentence itself didn't mention depth.)
+        if "--detailed" in args:
+            intent["depth"] = "detailed"
+        elif "--short" in args:
+            intent["depth"] = "short"
+        elif "--medium" in args:
+            intent["depth"] = "medium"
         from core.graph import run as run_flow
         appendices = set()
         if "--trace" in args:
@@ -157,6 +166,11 @@ def _dispatch(args):
             path = save_comparison(d1, d2, md)
             print("\n" + "=" * 70 + "\n" + md + "\n" + "=" * 70)
             print(f"\nSaved to: {path}\n")
+            if "--pdf" in args:
+                from report.export_pdf import markdown_to_pdf
+                pdf_path = os.path.splitext(path)[0] + ".pdf"
+                markdown_to_pdf(md, f"{d1} vs {d2}", pdf_path)
+                print(f"PDF saved to: {pdf_path}\n")
         else:
             drug = intent["drugs"][0]
             log.info(f"=== ASK -> FLOW: {drug} (depth={intent['depth']}) ===")

@@ -1,0 +1,120 @@
+Trust & Honesty (the most defensible category — and what your brand is built on)
+
+No-evidence refusal: when retrieval finds no real matches, refuse to generate, don't confabulate (the "hi how are you" fix).
+"I don't know" mode: per-section, refuse to fill a section when evidence is thin instead of padding.
+Source freshness indicator: surface the date of every source so users see when guidance is stale.
+Retraction/withdrawal check: flag if a cited paper has been retracted (PubMed/Retraction Watch API exists).
+Author/conflict-of-interest surfacing: pull declared COIs from papers and flag them in the report.
+Confidence calibration loop: track when your High/Medium/Low tags match expert judgment, tune accordingly.
+Hallucination guard: post-generation check that every numeric claim appears verbatim in retrieved evidence; flag any that don't.
+
+Data — beyond your existing list
+
+Pharmacovigilance: EudraVigilance (Europe), VigiAccess (WHO global) — adverse-event data outside the US.
+Drug pricing data: GoodRx, Medi-Span, NHS dm+d — pricing is what pharma/payers actually care about.
+Cochrane Library — gold-standard systematic reviews; subscription but the abstracts are open.
+NICE/SIGN/CDC guidelines — current treatment guidelines (UK/US/global), not just labels.
+Drugs.com / Drugbank — interaction and chemistry data (Drugbank is licensed).
+WHO Essential Medicines List / WHO ICD — global context.
+Pharmacogenomics: PharmGKB — drug-gene interactions (the right slice of the genomics angle for a drug tool, more focused than raw NCBI Gene).
+Conference abstracts (ASCO, AHA, ESC) — bleeding-edge findings months before paper publication.
+ChEMBL — bioactivity and chemical structure data.
+
+Capability & Intelligence
+
+Multi-document Q&A (chat with the evidence base): "what did Mayo find about elderly aspirin patients?" Conversational follow-up after the report.
+Side-by-side multi-drug compare (3+), not just two-drug.
+Class-level reports: "give me a report on SGLT2 inhibitors as a class" — drug-family analysis.
+Indication-first queries: "what's the best evidence for hypertension in pregnancy" — flips the question.
+Population stratification: report tuned to a specific population (pediatric, elderly, renal-impaired, pregnancy).
+Trial-matching: given a patient profile, find relevant ongoing trials.
+Auto-monitoring: a user subscribes to a drug, gets alerted when new evidence appears.
+Citation network analysis: surface which papers are most cited / most contested in this evidence space.
+Smart redaction: hide identifiable patient info if real-world data sources ever include any.
+
+Output & Format
+
+Editable reports: user can flag a section, add a note, regenerate just that section.
+Multiple report templates per use case (regulatory submission style, clinical summary, patient-facing, market-research style).
+Word/DOCX export alongside PDF.
+Citation export: BibTeX, RIS, EndNote.
+API/CSV export of underlying evidence for power users.
+Shareable read-only links (with the trust badge: "generated [date], evidence as of [date]").
+Side-by-side report version history: see how the evidence picture changed over months.
+Inline-citation hyperlinking: clicking [E12] in the PDF jumps to the source.
+
+UX & Workflow (this is where you can genuinely beat enterprise competitors)
+
+Onboarding: 60-second guided tour the first time, with a sample drug.
+Saved searches/library: a user's reports persist, are searchable, taggable.
+Folders/projects: group reports for an analysis.
+Comments & annotations within a report (for team workflows).
+Streaming output: report appears live as it generates, not after 40s of blank screen.
+Mobile-responsive UI: clinicians look up drugs on phones.
+Dark mode: small but expected polish.
+Keyboard shortcuts for power users (the Linear/Notion crowd).
+
+Collaboration / Org features
+
+Workspaces with roles (admin/editor/viewer).
+Shared report library within an org.
+SSO (Google, Microsoft) — table stakes for enterprise.
+Audit logs of who generated what (compliance).
+Usage analytics dashboard for org admins.
+White-labeling for higher-tier orgs (their logo on the PDF).
+
+Engineering & Operations
+
+Streaming generation (Server-Sent Events) — feels fast.
+Background job queue (Celery/RQ) — don't tie up HTTP requests for 40s reports.
+Proper logging + observability (Sentry for errors, Posthog/Mixpanel for usage).
+Rate-limiting per user/IP.
+Backup and disaster recovery for the vector store and user data.
+Multi-tenancy isolation in the vector store (per-org collections).
+Async source fetching (already partially there in LangGraph — make sure it's fully async-aware).
+Cost monitoring per-user, per-org (so you know unit economics in real time).
+Cache warming for common drugs (free reports = pre-generated overnight).
+Health-check endpoints + uptime monitoring.
+
+Security & Compliance (matters for medical/pharma buyers)
+
+HIPAA-readiness path (if you ever touch PHI). Don't claim compliance you don't have, but understand the gap.
+GDPR data handling (EU users will ask).
+SOC 2 path (enterprise sales will demand it within 12 months).
+Encryption at rest + in transit (table stakes).
+PII redaction in logs (your gateway logs rejected input — make sure none of it identifies a user).
+Penetration testing before any serious launch.
+Terms of Service + Privacy Policy + Medical Disclaimer drafted by an actual lawyer, not me.
+AI Act / FDA AI guidance compliance documentation (Causaly is already positioning here).
+
+Business / Growth
+
+Stripe integration: free tier, individual paid, team/org tiers.
+Usage-based billing option (per report) alongside subscription.
+Referral program.
+Email digest ("3 new papers on your followed drugs this week").
+Public marketing site separate from the app.
+A live demo / sample report on the landing page — no signup required.
+Documentation site (how to interpret tiers, methodology, evidence sourcing).
+Case studies / testimonials (once you have real users).
+Blog / SEO content — written by you about how the methodology works.
+API access as a product tier (sell your engine to other apps).
+
+Diagrams / visuals (you mentioned)
+
+Evidence-tier visual summary (a bar showing how much regulatory/peer-reviewed/preprint backs the report).
+Forest plots for extracted effect sizes across studies.
+Timeline view of when the evidence was published.
+Network graph of sources citing each other (the F2 traceability finally clickable).
+Drug structure visualization (from ChEMBL/PubChem).
+Trial-flow diagrams for the comparator agent.
+
+On the AlphaFold idea (#10) — straight talk
+AlphaFold predicts protein 3D structure from sequence. For your tool — which summarizes clinical evidence about marketed drugs — AlphaFold has almost no use. It would be relevant if you pivoted to early-stage drug discovery (designing molecules against a target protein), which is a completely different product, market, and competitor set (Schrödinger, Isomorphic Labs, Recursion). I'd cut it from this list unless you're seriously considering that pivot. Adding AlphaFold integration "because it's cool" is the kind of feature that signals lack of focus to a YC partner.
+On the NCBI Gene Bank / genomics idea (#9) — same caveat I gave you the first time. Genomics data is huge and different domain. The focused version that fits a drug tool is pharmacogenomics (PharmGKB) — gene-drug interactions, which I included above. That's the right slice; "NCBI Gene Bank correlation" without a specific use case is feature-creep.
+
+Add a screening/filtering node in LangGraph — before the synthesis step, run each evidence chunk through a filter: is this a direct comparison study? is this human data? is this a primary source or secondary? Log what gets filtered and why. This gives you a PRISMA-equivalent transparency layer.
+Extract and surface statistical values — when your LLM synthesizes, explicitly prompt it to extract and include numerical outputs: odds ratios, p-values, sample sizes, effect sizes. Add this to the report template. Your current prompt produces prose; add a "statistics" extraction pass.
+Add a monotherapy flag — when fetching clinical trial data from ClinicalTrials.gov and Europe PMC, filter for monotherapy arms. This is a query parameter you can add to your fetch logic.
+Comparative query mode — when the user enters "ibuprofen vs aspirin," run a dedicated head-to-head search query (e.g., "ibuprofen AND aspirin AND randomized") rather than two parallel single-drug fetches. This surfaces direct comparison studies instead of inferring from separate pools.
+Dosage extraction field — add a structured dosage block to your Evidence schema. When pulling from FDA labels and trials, extract the dosing regimen explicitly and include it in the report

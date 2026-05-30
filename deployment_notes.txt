@@ -1,0 +1,77 @@
+=== BUILD 3 (FINAL) — DEFERRED FIXES / NOTES ===
+Logged 2026-05-27.
+
+MONOGRAPH SECTIONS (Mechanism / Drug Interactions / Use in Specific Populations):
+- B2 machinery is DONE and correct: section-tagged retrieval + two-pass fallback +
+  report template that breaks these out only when evidence exists.
+- ROOT ISSUE is DATA, not code: openFDA's label endpoint returns OTC consumer
+  drug-facts labels (Rapidol, GOODYS MAX, Low Dose Aspirin, etc.). OTC labels do
+  NOT contain Mechanism of Action / Clinical Pharmacology / full Drug Interactions
+  / Use in Specific Populations sections. Those sections only exist on FULL
+  PRESCRIPTION labels (SPL). So the chunker has nothing to tag -> sections don't
+  surface. Dosing DOES surface (OTC labels have dosing).
+- FINAL-BUILD FIX = add richer sources (this is the planned "increase data sources"
+  step). Specifically:
+    * C5 — DailyMed / SPL full prescription labels (HAS mechanism, clinical
+      pharmacology, full interactions, specific populations). This is THE real fix.
+    * C2 — PubMed (when network allows NCBI; works on hotspot).
+    * C3 — medRxiv. C4 — Patents/Lens.
+- OPTIONAL QUICK WIN if wanted before final: Path A — widen mechanism/interactions/
+  populations retrieval to also pull peer-reviewed literature chunks that DISCUSS
+  mechanism (e.g. COX inhibition in review papers), not just label-tagged sections.
+  ~15 min. Deferred for now per founder decision: do these short fixes at final
+  build when sources are expanded.
+
+DECISION (founder): these monograph sections are a SOURCE-DEPTH problem; will be
+resolved at final build by adding richer sources (DailyMed/SPL etc.). The short
+retrieval fixes (Path A) will be applied THERE alongside the new sources. Do not
+treat as a bug in current build — B2 logic is sound.
+
+
+=== DEPLOYMENT — STORAGE / VECTOR STORE (logged 2026-05-28) ===
+FOUNDER NOTE TO SELF: when deploying, BUY/PROVISION STORAGE and host the vector
+store there — i.e. vectorize INTO persistent deployed storage, not the local disk.
+
+WHY THIS MATTERS:
+- Right now Qdrant runs EMBEDDED/LOCAL (data/qdrant/ on the laptop). That's perfect
+  for a prototype but does NOT survive a cloud deploy: most hosts (Render/Railway/
+  containers) have EPHEMERAL disks — the qdrant folder gets wiped on every restart/
+  redeploy, so you'd re-embed from scratch every time (slow + re-pays embedding cost).
+- On deploy you need PERSISTENT storage for the vectors. Options:
+    1. Managed Qdrant Cloud (easiest — swap the embedded client for a hosted URL+key;
+       our storage/vectorstore.py is the ONLY file that changes).
+    2. A persistent volume / disk attached to the host (mount data/qdrant/ to it).
+    3. Another managed vector DB (Pinecone, Weaviate, pgvector on managed Postgres).
+- COST PLANNING: embeddings are cheap per-run but storage + re-embedding at scale adds
+  up. Budget for: (a) vector DB storage (grows with #drugs × #chunks), (b) re-embedding
+  only when source data changes (the E3 cache already avoids needless re-fetch; a
+  persistent vector store avoids needless re-embed).
+
+ARCHITECTURE IS ALREADY READY FOR THIS:
+- vectorstore.py is cleanly isolated — switching from embedded Qdrant to hosted Qdrant
+  is basically a connection-string change, not a rewrite. Good separation pays off here.
+- Keep data/ gitignored (already done). Vectors live in the DB, not the repo.
+
+ACTION AT DEPLOY: provision persistent vector storage FIRST, point vectorstore.py at it,
+verify a drug persists across a restart (ingest once, restart, confirm search still
+returns without re-embedding).
+
+
+=== INPUT GATEWAY / PORTAL SAFETY (logged 2026-05-28) ===
+Built core/gateway.py: sanitize() (deterministic — bounds length, strips control
+chars, blocks obvious shell/injection/XSS) + parse_intent() (LLM call: parses
+natural-language query into {mode, drugs, depth} AND safety-screens for
+off-topic/abusive/injection). Rejections are LOGGED ([gateway] REJECTED ...).
+New CLI command: `ask "<natural sentence>"` — the same entry point a web portal calls.
+
+HONEST LIMIT — this is LAYER ONE, not a complete moderation system. Before public deploy:
+- Add RATE LIMITING (per-IP / per-user) — gateway does not throttle.
+- Add PERSISTENT logging + alerting for rejections (currently just log.warning).
+- Consider a dedicated MODERATION API (OpenAI moderations endpoint) in addition to
+  the LLM intent screen, for abusive/sexual/hateful content.
+- The LLM intent-screen reduces but does not eliminate prompt-injection risk; keep
+  the user input strictly as DATA to classify, never execute it.
+- "Lethal trifecta" note: Aletheon is currently SAFE here because it has no tool that
+  ACTS (no file/system/email writes) — it only reads APIs. If you EVER add acting
+  tools, re-audit: untrusted input + private data + ability to act = the danger combo.
+  Keep query input sandboxed away from any future action-taking capability. 
