@@ -166,7 +166,16 @@ above when both apply. Cite with [E#] tags.
 Write a Markdown report with EXACTLY these sections:
 
 ## Summary
-2-4 sentence neutral overview (use OVERVIEW evidence), cited.
+4-6 sentence executive summary that quotes the most important numbers verbatim \
+from the structured findings above (effect sizes, percentages, p-values, sample \
+sizes, dose limits) and cites their [E#] tags. This is the FIRST thing a busy \
+reader sees — it must stand alone as the "what you need to know." Lead with \
+the primary indication, then the most important efficacy finding with its \
+number, then the most important safety signal with its number, then a one-line \
+note on evidence strength. Example shape: "Drug X is indicated for [primary \
+condition]. In [study type, n=...], it showed [outcome: X% vs Y%, p=Z] [E#]. \
+The most important safety signal is [signal+number] [E#]. Evidence base is \
+[N peer-reviewed studies, M regulatory sources]."
 
 ## Key Findings
 Most important efficacy/clinical points (use EFFICACY evidence), bulleted, cited.
@@ -217,6 +226,14 @@ list preprint findings OR write exactly "No preprint evidence in current sources
 — NEVER both. If you write any preprint bullet, do NOT also write the \
 "No preprint evidence" line. Only write that line when there is genuinely no \
 preprint evidence at all.
+
+## Clinical Bottom Line
+2-4 sentences of CONCRETE practical guidance, grounded ONLY in the evidence \
+above. Format: "Use [drug] for [specific indication+context] at [dose]. The \
+primary risk to monitor is [signal+number]. Avoid or use cautiously in [specific \
+population with cited reason]." Do NOT recommend uses the evidence does not \
+support. If the evidence does not support a clear recommendation for a clinical \
+context, say so explicitly.
 
 Cite using [E#] tags only. For the optional monograph sections (Dosing, Drug \
 Interactions, Mechanism of Action, Use in Specific Populations), include a section \
@@ -365,22 +382,27 @@ def generate_report(drug: str, sections: dict[str, list[dict]], depth: str = "me
 
     report_md = header + body + "\n" + sources
 
-    # Step 3: insert visible extracted-findings tables.
-    # - Compact table at the top (after Summary) — Elicit-style audit view.
-    # - Per-section sub-tables under Key Findings (efficacy) and Safety/Warnings.
+    # Step A: section restructure. Compact Evidence Table moves from "right
+    # after Summary" (where it pushed the synthesis down the page) to the
+    # audit-appendix position just before Sources. Per-section sub-tables
+    # stay where they are — they're small and they support the prose nearby.
     if findings:
-        compact = findings_to_compact_table(findings)
+        compact = findings_to_compact_table(findings, heading_level=3)
         if compact:
-            # Insert the compact table right after the first "## Summary" section.
-            # Locate the start of the next ## header after Summary, and splice in.
-            m = re.search(r"(## Summary[^\n]*\n.*?)(\n## )", report_md, flags=re.S)
-            if m:
-                report_md = report_md[:m.end(1)] + "\n\n" + compact + m.group(2) + report_md[m.end():]
+            appendix = (
+                "\n## Evidence Table (Audit Appendix)\n"
+                "_Per-paper structured extraction — for verification. The "
+                "synthesis above is drawn from these rows; this section lets "
+                "you audit each claim back to its source._\n\n"
+                + compact + "\n\n"
+            )
+            if "\n## Sources" in report_md:
+                report_md = report_md.replace("\n## Sources",
+                                              appendix + "\n## Sources", 1)
             else:
-                # Fallback: put it right after the header if Summary not found.
-                report_md = report_md.replace("\n## ", "\n\n" + compact + "\n\n## ", 1)
+                report_md = report_md + "\n" + appendix
 
-        # Per-section sub-tables: drop the right rows under Key Findings and Safety.
+        # Per-section sub-tables stay inline (small, support nearby prose).
         eff_table = findings_to_section_table(findings, focus="efficacy")
         if eff_table:
             report_md = re.sub(

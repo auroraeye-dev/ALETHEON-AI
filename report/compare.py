@@ -99,24 +99,47 @@ were partial. Prefer the structured findings.
 
 {block2}
 
-Write a Markdown comparison with EXACTLY these sections:
+Write a Markdown comparison with EXACTLY these sections, in this order:
+
+## Bottom Line
+A 3-5 sentence executive summary that quotes the most important comparative \
+numbers verbatim from the structured findings above. This is the FIRST thing \
+a busy reader sees — it must stand alone. Example shape: "In direct head-to-head \
+trials, [drug1] showed X% vs Y% on [endpoint] (p=Z) [A#], while [drug2] showed \
+A vs B on [other endpoint] [B#]. Safety profiles differ: [drug1] [signal+number], \
+[drug2] [signal+number]. Evidence base: N peer-reviewed studies for drug1 vs M \
+for drug2, with [comment on direct head-to-head coverage]."
+
+## Key Trade-offs
+A bulleted list (4-6 bullets) of the most important comparative differences. \
+EVERY bullet must quote at least one verbatim number from the structured findings \
+(effect size, percentage, CI, p-value, sample size) and cite its [A#]/[B#] tag. \
+NO adjective-only bullets. If a bullet has no quantitative anchor, drop it. \
+Example: "- **GI tolerability**: [drug2] associated with OR 7.58 (95% CI \
+2.64–21.78) for upper GI ulceration vs [drug1] [B#]."
 
 ## Overview
 1-2 sentences on what each drug is and its primary use, cited.
 
 ## Efficacy — Head to Head
-Compare effectiveness on shared indications. Note where one has stronger/more \
-evidence. Cite [A#]/[B#].
+Compare effectiveness on shared indications. Quote numbers verbatim. Note where \
+one has stronger/more evidence. Cite [A#]/[B#].
 
 ## Safety — Head to Head
-Compare adverse effects, warnings, contraindications. Cite both sides.
+Compare adverse effects, warnings, contraindications. Quote numbers verbatim. \
+Cite both sides.
 
 ## Evidence Strength
-Comment on how strong each drug's evidence base is (tiers, # sources). Be honest \
-where one is thinner.
+Comment on how strong each drug's evidence base is (tiers, # sources, # direct \
+head-to-head studies). Be honest where one is thinner.
 
-## Bottom Line
-Neutral summary of the key trade-offs (NOT a winner declaration), cited.
+## Clinical Bottom Line
+2-4 sentences of CONCRETE clinical guidance, grounded ONLY in the comparative \
+evidence above. Format: "Prefer [drug] when [specific clinical scenario] because \
+[cited evidence]. Prefer [other drug] when [other scenario] because [cited \
+evidence]. Caution: [specific population/contraindication with number]." If the \
+evidence does not support a clear directional recommendation in a given \
+scenario, say so explicitly — do not invent guidance.
 
 Cite using [A#]/[B#] tags only."""
 
@@ -273,24 +296,36 @@ def generate_comparison(drug1: str, sections1: dict, drug2: str, sections2: dict
 
     report_md = header + h2h_note + body + "\n" + "\n".join(src)
 
-    # Step 3 visible tables: compact "Evidence Table" near the top (one per drug)
-    # + per-section sub-tables under Efficacy and Safety.
+    # Step A: section restructure. The synthesis (Bottom Line, Key Trade-offs,
+    # Efficacy, Safety) leads the report; the Evidence Tables move to an audit
+    # appendix immediately before Sources. Readers get the answer in the first
+    # 30 seconds; auditors get the structured rows when they want them.
     import re as _re
     compact_blocks = []
     if findings1:
-        compact_blocks.append(f"### {drug1} — extracted findings\n" +
-                              findings_to_compact_table(findings1))
+        inner = findings_to_compact_table(findings1, heading_level=4)
+        if inner:
+            compact_blocks.append(f"### {drug1} — extracted findings\n\n" + inner)
     if findings2:
-        compact_blocks.append(f"### {drug2} — extracted findings\n" +
-                              findings_to_compact_table(findings2))
+        inner = findings_to_compact_table(findings2, heading_level=4)
+        if inner:
+            compact_blocks.append(f"### {drug2} — extracted findings\n\n" + inner)
     if compact_blocks:
-        compact_section = "\n\n".join(compact_blocks) + "\n\n"
-        # Insert after the Overview section (or right before the first ## if no Overview).
-        m = _re.search(r"(## Overview[^\n]*\n.*?)(\n## )", report_md, flags=_re.S)
-        if m:
-            report_md = report_md[:m.end(1)] + "\n\n" + compact_section + m.group(2) + report_md[m.end():]
+        appendix = (
+            "\n## Evidence Tables (Audit Appendix)\n"
+            "_Per-paper structured extraction — for verification. The synthesis "
+            "above is drawn from these rows; this section lets you audit each "
+            "claim back to its source._\n\n"
+            + "\n\n".join(compact_blocks)
+            + "\n\n"
+        )
+        # Insert immediately BEFORE the Sources heading. Sources section is
+        # always last; if for some reason it isn't there, append the appendix
+        # at the end.
+        if "\n## Sources" in report_md:
+            report_md = report_md.replace("\n## Sources", appendix + "\n## Sources", 1)
         else:
-            report_md = report_md.replace("\n## ", "\n\n" + compact_section + "\n## ", 1)
+            report_md = report_md + "\n" + appendix
 
     # Per-section sub-tables under Efficacy and Safety. For comparison reports,
     # we show both drugs' findings together so the reader sees the parallel.

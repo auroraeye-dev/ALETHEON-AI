@@ -329,10 +329,15 @@ def findings_to_synthesis_block(findings: list[ExtractedFinding]) -> str:
 # ---- Rendering: the visible table at the top of the report ----
 
 def findings_to_compact_table(findings: list[ExtractedFinding],
-                              max_rows: int = 30) -> str:
+                              max_rows: int = 30,
+                              heading_level: int = 2) -> str:
     """Render the top-of-report compact 'Evidence Table' as markdown.
     Columns are chosen to be the most informative without making the table too
     wide for screens/PDF — full details remain available in the Sources list.
+
+    heading_level: 2 -> "## Evidence Table" (top-level appendix heading).
+                   3 -> "### Evidence Table" (nested under a parent appendix).
+                   4 -> drops the heading entirely (caller provides its own).
 
     Failed-extraction rows (no findings extractable) are EXCLUDED from the
     visible table — they're noise visually. A count footer preserves the
@@ -341,17 +346,24 @@ def findings_to_compact_table(findings: list[ExtractedFinding],
         return ""
     visible = [f for f in findings if f.extraction_quality in ("complete", "partial")]
     n_failed = len(findings) - len(visible)
+    hash_prefix = "#" * heading_level if heading_level in (2, 3) else ""
+    heading_line = f"{hash_prefix} Evidence Table" if hash_prefix else ""
     if not visible:
         # All papers failed — be honest, don't render an empty table.
-        return (f"## Evidence Table\n_All {len(findings)} retrieved papers "
+        prefix = heading_line + "\n" if heading_line else ""
+        return (f"{prefix}_All {len(findings)} retrieved papers "
                 f"yielded no extractable findings — see Sources for raw chunks._")
     rows = visible[:max_rows]
-    lines = ["## Evidence Table",
-             "_Per-paper structured extraction. Each row is the LLM's "
-             "extraction of one source, with numbers quoted verbatim. "
-             "Quality flags: ✓ complete · ⚠ partial._\n",
-             "| Tag | Quality | Source | Study type | n | Key finding | Conclusion |",
-             "|-----|---------|--------|------------|---|-------------|------------|"]
+    lines = []
+    if heading_line:
+        lines.append(heading_line)
+    lines.extend([
+        "_Per-paper structured extraction. Each row is the LLM's "
+        "extraction of one source, with numbers quoted verbatim. "
+        "Quality flags: ✓ complete · ⚠ partial._\n",
+        "| Tag | Quality | Source | Study type | n | Key finding | Conclusion |",
+        "|-----|---------|--------|------------|---|-------------|------------|"
+    ])
     for f in rows:
         q = {"complete": "✓", "partial": "⚠"}.get(f.extraction_quality, "?")
         def clip(s, n):
