@@ -332,21 +332,28 @@ def findings_to_compact_table(findings: list[ExtractedFinding],
                               max_rows: int = 30) -> str:
     """Render the top-of-report compact 'Evidence Table' as markdown.
     Columns are chosen to be the most informative without making the table too
-    wide for screens/PDF — full details remain available in the Sources list."""
+    wide for screens/PDF — full details remain available in the Sources list.
+
+    Failed-extraction rows (no findings extractable) are EXCLUDED from the
+    visible table — they're noise visually. A count footer preserves the
+    audit trail ("N papers excluded with no extractable findings")."""
     if not findings:
         return ""
-    rows = findings[:max_rows]
+    visible = [f for f in findings if f.extraction_quality in ("complete", "partial")]
+    n_failed = len(findings) - len(visible)
+    if not visible:
+        # All papers failed — be honest, don't render an empty table.
+        return (f"## Evidence Table\n_All {len(findings)} retrieved papers "
+                f"yielded no extractable findings — see Sources for raw chunks._")
+    rows = visible[:max_rows]
     lines = ["## Evidence Table",
              "_Per-paper structured extraction. Each row is the LLM's "
              "extraction of one source, with numbers quoted verbatim. "
-             "Quality flags: ✓ complete · ⚠ partial · ✗ failed (raw chunk "
-             "available in Sources)._\n",
+             "Quality flags: ✓ complete · ⚠ partial._\n",
              "| Tag | Quality | Source | Study type | n | Key finding | Conclusion |",
              "|-----|---------|--------|------------|---|-------------|------------|"]
     for f in rows:
-        q = {"complete": "✓", "partial": "⚠", "failed": "✗"}.get(
-            f.extraction_quality, "?")
-        # truncate long fields and escape pipe chars so table renders
+        q = {"complete": "✓", "partial": "⚠"}.get(f.extraction_quality, "?")
         def clip(s, n):
             s = (s or "").replace("|", "/").replace("\n", " ")
             return s[:n].strip() + ("…" if len(s) > n else "")
@@ -358,6 +365,11 @@ def findings_to_compact_table(findings: list[ExtractedFinding],
         lines.append(f"| {f.tag} | {q} | {short_src} | "
                      f"{clip(f.study_type, 25)} | {clip(f.n, 18)} | "
                      f"{clip(key, 75)} | {clip(f.conclusion, 80)} |")
+    if n_failed:
+        lines.append(f"\n_{n_failed} additional paper(s) retrieved had no "
+                     f"extractable findings (e.g. trial registrations with no "
+                     f"reported results, or chemistry/preprint records). "
+                     f"They remain available in Sources for traceability._")
     return "\n".join(lines)
 
 

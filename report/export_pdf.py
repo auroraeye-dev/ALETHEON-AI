@@ -192,54 +192,73 @@ def markdown_to_pdf(report_md: str, drug: str, out_path: str) -> str:
 
     _header_block(story, st, drug, meta_line)
 
-    in_sources = False
-    lines = report_md.splitlines()
-    for raw in lines:
-        line = raw.rstrip()
-        if not line.strip():
-            continue
-        # skip the top markdown title and the meta italics (already in header)
-        if line.startswith("# "):
-            continue
-        if line.startswith("_Generated"):
-            continue
-        if line.startswith("## "):
-            heading = line[3:].strip()
-            in_sources = heading.lower().startswith("sources")
-            story.append(Paragraph(heading, st["h2"]))
-            story.append(HRFlowable(width="100%", thickness=0.4, color=NAVY_LIGHT,
-                                    spaceBefore=0, spaceAfter=4))
-            continue
-        if in_sources:
-            sm = _SRC_RE.match(line)
-            if sm:
-                tags, tier, title, srcid = sm.groups()
-                badge = _badge(tier)
-                txt = Paragraph(f'<b><font color="#0d4e78">{tags}</font></b> '
-                                f'{_inline_md(title)}  '
-                                f'<font color="#5b6b78" size="7">{_inline_md(srcid)}</font>',
-                                st["source"])
-                row = Table([[badge, txt]], colWidths=[1.05 * inch, 5.0 * inch])
-                row.setStyle(TableStyle([
-                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                    ("LEFTPADDING", (0, 0), (0, 0), 0),
-                    ("TOPPADDING", (0, 0), (-1, -1), 1),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-                ]))
-                story.append(row)
-            else:
-                # Skip raw URL continuation lines — they clutter the print
-                # layout and the source id already identifies the document.
-                if line.strip().lower().startswith("http"):
-                    continue
-                story.append(Paragraph(_inline_md(line.strip()), st["source"]))
-            continue
-        # body bullets vs paragraphs
-        if line.lstrip().startswith(("- ", "* ")):
-            content = line.lstrip()[2:]
-            story.append(Paragraph(_inline_md(content), st["bullet"], bulletText="•"))
-        else:
-            story.append(Paragraph(_inline_md(line), st["body"]))
+    # Strip the top h1 title and the meta italics line before parsing — both
+    # are already rendered by _header_block above.
+    body_md = report_md
+    body_md = re.sub(r"^#\s+.+?\n", "", body_md, count=1, flags=re.M)
+    body_md = re.sub(r"^_Generated[^\n]*_\n", "", body_md, count=1, flags=re.M)
+
+    # ---- Use the markdown-aware renderer for the body ----
+    # render_markdown_body handles headings, tables, lists, paragraphs. We hook
+    # the source-line special case (badge + tag rendering) via the on_paragraph
+    # callback when we're inside the Sources section.
+    from report.md_to_pdf import render_markdown_body
+
+    _state = {"in_sources": False}
+
+    def _on_h2(heading: str, story_list: list):
+        story_list.append(Paragraph(heading, st["h2"]))
+        story_list.append(HRFlowable(width="100%", thickness=0.4, color=NAVY_LIGHT,
+                                     spaceBefore=0, spaceAfter=4))
+
+    def _on_in_sources_change(in_src: bool):
+        _state["in_sources"] = in_src
+
+    def _on_paragraph(html_inner: str, story_list: list, in_sources: bool) -> bool:
+        """Returning True means 'handled — do not also add the default paragraph'."""
+        if not in_sources:
+            return False
+        # The source lines look like:  **[E1][E2]** (regulatory) FDA Label: Ibuprofen — fda:xxx
+        # When the markdown source line has a trailing URL on a soft-break
+        # continuation, the markdown library packs both into ONE paragraph
+        # separated by <br/>. We split on br and keep only the first segment
+        # for the regex match — the URL is redundant with the source-id and we
+        # already deliberately suppress it from the layout.
+        # The markdown library converts ** to <strong>; strip back to plain text
+        # so the regex matches.
+        first_segment = re.split(r"<br\s*/?>", html_inner, maxsplit=1, flags=re.I)[0]
+        plain = re.sub(r"<[^>]+>", "", first_segment)
+        sm = _SRC_RE.match(plain)
+        if sm:
+            tags, tier, title, srcid = sm.groups()
+            badge = _badge(tier)
+            txt = Paragraph(f'<b><font color="#0d4e78">{tags}</font></b> '
+                            f'{_inline_md(title)}  '
+                            f'<font color="#5b6b78" size="7">{_inline_md(srcid)}</font>',
+                            st["source"])
+            row = Table([[badge, txt]], colWidths=[1.05 * inch, 5.0 * inch])
+            row.setStyle(TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (0, 0), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 1),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ]))
+            story_list.append(row)
+            return True
+        # Skip raw URL continuation lines (defensive — should be rare now).
+        if plain.strip().lower().startswith("http"):
+            return True
+        return False
+
+    body_flowables = render_markdown_body(
+        body_md, st,
+        callbacks={
+            "on_h2": _on_h2,
+            "on_in_sources_change": _on_in_sources_change,
+            "on_paragraph": _on_paragraph,
+        },
+    )
+    story.extend(body_flowables)
 
     doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
     log.info(f"[export] PDF written -> {out_path}")
