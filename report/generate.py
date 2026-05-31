@@ -59,7 +59,11 @@ def _merge_and_tag(sections: dict[str, list[dict]]) -> tuple[dict, list[dict]]:
 
 
 def _evidence_block(section_tags: dict, ordered: list[dict]) -> str:
-    """Format the evidence the LLM sees, grouped by which section it's for."""
+    """Format the evidence the LLM sees, grouped by which section it's for.
+    For each chunk, we ALSO prepend an EXTRACTED NUMBERS block when the chunk
+    contains statistical values — this cues the LLM to quote actual numbers
+    instead of writing in adjectives. (Step 1 of the Elicit-gap closure.)"""
+    from report.stats_extract import format_numbers_for_prompt
     lines = []
     label = {
         "overview": "OVERVIEW evidence",
@@ -82,7 +86,12 @@ def _evidence_block(section_tags: dict, ordered: list[dict]) -> str:
         for c in ordered:
             if c["tag"] in tags and c["tag"] not in seen:
                 seen.add(c["tag"])
-                lines.append(f"[{c['tag']}] (tier: {c['tier']}, {c['source']}:{c['source_id']}) {c['text']}")
+                numbers_block = format_numbers_for_prompt(c["text"])
+                header = f"[{c['tag']}] (tier: {c['tier']}, {c['source']}:{c['source_id']})"
+                if numbers_block:
+                    lines.append(f"{header}\n{numbers_block}\nFULL TEXT: {c['text']}")
+                else:
+                    lines.append(f"{header} {c['text']}")
     return "\n".join(lines)
 
 
@@ -121,15 +130,36 @@ Medium = some support or only moderate-tier sources. Low = single source, weak \
 tier, or only a preprint.
 6. CONTRADICTIONS: if two or more pieces of evidence disagree, you MUST surface \
 this in the Contradictions section with both sides cited. Do not hide disagreement.
-7. Be concise, factual, neutral. No marketing language."""
+7. Be concise, factual, neutral. No marketing language.
+8. QUANTIFY YOUR CLAIMS. When an evidence chunk includes an EXTRACTED NUMBERS \
+block (effect sizes, CIs, p-values, percentages, sample sizes), QUOTE the actual \
+numbers verbatim when you make a claim from that source — never write in \
+adjectives when a number is available. Good: "reduced events with HR 0.60 (95% \
+CI 0.31–1.17) [E14]" / "liver enzyme elevation in 62% vs 18% (p=0.009) [E7]". \
+Weak (avoid): "showed improved outcomes [E14]" / "had a lower rate [E7]". \
+For chunks without an EXTRACTED NUMBERS block (e.g. OTC labels, FAERS summaries), \
+prose is fine — only the quantitative chunks demand quantitative writing."""
 
 USER_TEMPLATE = """Drug / query: {drug}
 
 Evidence mix retrieved: {tier_tally}
 {tier_authority}
 
-The evidence below is grouped by which section it supports. Use each group for
-its section. Cite with [E#] tags.
+==== STRUCTURED PER-PAPER FINDINGS ====
+The PRIMARY input for your synthesis is the structured rows below. Each row is
+a per-paper extraction: study type, population, intervention, key numeric
+outcomes (with verbatim values), safety signal, and conclusion. When you make
+a claim, PREFER quoting an OUTCOME_# field directly (e.g. "GI ulceration: OR
+7.58 (95% CI 2.64–21.78)") rather than describing it in adjectives. Each row's
+[E#] tag is your citation handle.
+
+{findings}
+
+==== SUPPORTING RAW EVIDENCE ====
+The evidence below is the raw, section-grouped chunk text — use it ONLY as
+supporting context (for example, when an extracted row was partial or you need
+section-specific phrasing like dosing). Always prefer the structured findings
+above when both apply. Cite with [E#] tags.
 
 {evidence}
 
@@ -248,12 +278,30 @@ def generate_report(drug: str, sections: dict[str, list[dict]], depth: str = "me
     if not ordered:
         return f"# Aletheon Report: {drug}\n\n_No evidence retrieved._\n"
 
+    # ---- STEP 3: per-paper structured extraction ----
+    # Before the synthesis call, turn each retrieved paper into a structured row.
+    # The synthesis prompt receives these rows (verbatim numbers paired with
+    # outcomes) instead of raw chunks alone — so the model quotes numbers
+    # rather than writing in adjectives. Each finding inherits the [E#] tag of
+    # its source's first chunk.
+    from report.extract import (extract_findings, findings_to_synthesis_block,
+                                findings_to_compact_table, findings_to_section_table)
+    findings = extract_findings(ordered)
+    # Map source_id -> [E#] tag (first chunk encountered for that source).
+    sid_to_tag: dict = {}
+    for c in ordered:
+        sid_to_tag.setdefault(c["source_id"], c["tag"])
+    for f in findings:
+        f.tag = sid_to_tag.get(f.source_id, "")
+
+    findings_block = findings_to_synthesis_block(findings)
     evidence_block = _evidence_block(section_tags, ordered)
     guidance = DEPTH_GUIDANCE.get(depth, DEPTH_GUIDANCE["medium"])
     client = _get_client()
 
     log.info(f"[report] generating for {drug!r} (depth={depth}) from {len(ordered)} "
-             f"unique chunks across {len([s for s in sections if sections[s]])} sections …")
+             f"unique chunks ({len(findings)} extracted findings) "
+             f"across {len([s for s in sections if sections[s]])} sections …")
     resp = client.chat.completions.create(
         model=config.LLM_MODEL,
         messages=[
@@ -261,6 +309,7 @@ def generate_report(drug: str, sections: dict[str, list[dict]], depth: str = "me
             {"role": "user", "content": USER_TEMPLATE.format(
                 drug=drug,
                 evidence=evidence_block,
+                findings=findings_block,
                 tier_tally=_tier_tally(ordered),
                 tier_authority=TIER_AUTHORITY) + "\n\n" + guidance},
         ],
@@ -315,6 +364,35 @@ def generate_report(drug: str, sections: dict[str, list[dict]], depth: str = "me
               f"grounded in retrieved sources only_\n\n")
 
     report_md = header + body + "\n" + sources
+
+    # Step 3: insert visible extracted-findings tables.
+    # - Compact table at the top (after Summary) — Elicit-style audit view.
+    # - Per-section sub-tables under Key Findings (efficacy) and Safety/Warnings.
+    if findings:
+        compact = findings_to_compact_table(findings)
+        if compact:
+            # Insert the compact table right after the first "## Summary" section.
+            # Locate the start of the next ## header after Summary, and splice in.
+            m = re.search(r"(## Summary[^\n]*\n.*?)(\n## )", report_md, flags=re.S)
+            if m:
+                report_md = report_md[:m.end(1)] + "\n\n" + compact + m.group(2) + report_md[m.end():]
+            else:
+                # Fallback: put it right after the header if Summary not found.
+                report_md = report_md.replace("\n## ", "\n\n" + compact + "\n\n## ", 1)
+
+        # Per-section sub-tables: drop the right rows under Key Findings and Safety.
+        eff_table = findings_to_section_table(findings, focus="efficacy")
+        if eff_table:
+            report_md = re.sub(
+                r"(## Key Findings[^\n]*\n)",
+                lambda m: m.group(1) + eff_table + "\n\n",
+                report_md, count=1)
+        safety_table = findings_to_section_table(findings, focus="safety")
+        if safety_table:
+            report_md = re.sub(
+                r"(## Safety / Warnings[^\n]*\n)",
+                lambda m: m.group(1) + safety_table + "\n\n",
+                report_md, count=1)
 
     # Retraction-Watch / Crossref check on the cited evidence. If any cited
     # paper has been retracted/corrected/flagged, surface that prominently —

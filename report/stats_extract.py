@@ -42,8 +42,11 @@ _PATTERNS = [
     ("percent", re.compile(r"\b(\d+\.?\d*)\s*%(?!\s*CI)", re.I)),
 ]
 
-# A cap so a single stat-dense abstract doesn't flood the output.
-_MAX_PER_EVIDENCE = 6
+# A cap so a single stat-dense abstract doesn't flood the output. 8 fits the
+# typical "a few ratios, a few CIs, one or two p-values, one sample size" pattern
+# without dropping the p-value — which is the single most informative signal
+# of whether a finding is real.
+_MAX_PER_EVIDENCE = 8
 
 
 def _context(text: str, start: int, end: int, pad: int = 45) -> str:
@@ -135,4 +138,30 @@ def format_stats_markdown(stats: list[dict]) -> str:
         vals = ", ".join(dict.fromkeys(i["value"] for i in items))  # dedupe, keep order
         tier = items[0].get("tier", "")
         lines.append(f"- **{sid}** ({tier}): {vals}")
+    return "\n".join(lines)
+
+
+def format_numbers_for_prompt(text: str, max_n: int = 8) -> str:
+    """Return a compact 'EXTRACTED NUMBERS' block for one chunk's text, ready
+    to inject into the LLM prompt alongside the FULL TEXT. Returns an empty
+    string if no numbers were extracted (so the prompt stays clean for chunks
+    like FDA OTC labels or FAERS summaries that don't carry inferential stats).
+
+    Step-1 of the Elicit-gap closure: the numbers are already in the chunk text,
+    but burying them inside long abstracts means the LLM tends to summarize in
+    adjectives. Surfacing the values explicitly cues the model to quote them
+    verbatim. The FULL TEXT is still present, so this is a *hint* layer, not a
+    replacement — nothing is dropped.
+
+    Effect sizes (HR/OR/RR) and CIs are listed first; lone percentages and
+    sample sizes last (they're weakest signal in isolation).
+    """
+    stats = extract_from_text(text)
+    if not stats:
+        return ""
+    priority = {"ratio": 0, "ci": 1, "p_value": 2, "sample_size": 3, "percent": 4}
+    stats = sorted(stats, key=lambda s: priority.get(s["kind"], 9))[:max_n]
+    lines = ["EXTRACTED NUMBERS FROM THIS SOURCE:"]
+    for s in stats:
+        lines.append(f"  - {s['kind']}: {s['value']}")
     return "\n".join(lines)

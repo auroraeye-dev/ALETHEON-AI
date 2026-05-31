@@ -1,0 +1,43 @@
+1. In-body numeric extraction in the comparator and main report. This is the biggest gap from the Elicit
+ benchmark. Right now F3's regex-extracted statistics live in a useless appendix, divorced from the claims.
+  The fix: at retrieval time, for each evidence chunk, pre-extract any quantitative findings 
+  (HR, OR, RR, 95% CIs, p-values, percentages, n=) and inject them with the chunk into the LLM prompt.
+   Then change the prompts (both generate.py and compare.py) to say "when you make a comparative or 
+   efficacy claim, quote the specific numeric finding from the source if one is available, not adjectives 
+   like 'lower' or 'better.'" Elicit's whole credibility advantage comes from this one design choice.
+
+2. Methodology section ("How this report was made"). Currently invisible. Add a small section showing:
+ sources searched, total candidates returned, how many passed the relevance filter, how many were used in
+ the report, what was excluded and why. Even three sentences would work. This is exactly your brand promise
+  — "honest about evidence" — and you don't show your work today. Elicit's PRISMA flow diagram is the thing 
+  that makes regulatory writers love them.
+
+3. Better relevance filtering for comparison queries. When the query is "X vs Y," weight retrieval 
+toward papers that mention both drugs together. Right now your comparator runs two independent single-drug
+ pipelines and joins them. That's why HIV/dabigatran/warfarin papers ended up in your aspirin column. 
+ A proper comparator should additionally search for "X and Y" together and prioritize head-to-head trials.
+
+4. 4. Structured data tables for comparison reports. Comparison queries deserve side-by-side tables 
+(drug × dimension: indication, dose, key outcomes, safety, evidence count). Markdown tables already 
+render; ReportLab tables render in PDF. This is half a day's work and visibly changes the perceived 
+sophistication of the output.
+
+5. 5. Fix the [A#][B#] literal placeholders in output. Cosmetic bug from your benchmark report — the
+ LLM emits [A#][B#] when it doesn't have a specific source to cite. Either strip these post-generation
+  or change the prompt to forbid them. Five-minute fix that visibly improves polish.
+
+  
+6. flow --dev gate + no-evidence refusal. The "hi how are you" and "comparison between ibuprofen and 
+aspirin" bugs both still live. Lock flow behind --dev, and add a refusal in both pipelines that says 
+"couldn't find real evidence for this query" when combine produces fewer than N high-confidence matches. 
+Without this, public exposure of the tool is dangerous.
+
+
+7. Tighten ChEMBL fuzzy match. Right now ChEMBL's /molecule/search silently substring-matches a drug name 
+from a sentence and returns it as if that were the query. This is how "comparison between ibuprofen and 
+aspirin" got mapped to "aspirin" inside ChEMBL. Should require closer name match.
+
+
+8. Fix the FDA broad-fallback titles. When FDA falls back to broad search, every returned label is titled 
+"FDA Label: <your query>". Titles should reflect the actual brand name in the label, not the user's query 
+string — current behavior is a small but real misrepresentation.

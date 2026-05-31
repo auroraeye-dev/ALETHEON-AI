@@ -46,47 +46,92 @@ def _best_id(item: dict) -> tuple[str, str]:
     return item.get("id", "unknown"), "https://europepmc.org/"
 
 
-def fetch(drug: str, page_size: int = None) -> list[Evidence]:
-    from core.config import config
-    page_size = page_size or config.EUROPEPMC_PAGE_SIZE
-    """Search Europe PMC for `drug`, return papers + preprints as Evidence."""
-    log.info(f"[europepmc] searching for {drug!r} ...")
-    params = {
-        "query": drug,
-        "format": "json",
-        "pageSize": page_size,
-        "resultType": "core",   # includes abstractText
-        # NOTE: do NOT send sort="RELEVANCE" — Europe PMC's API rejects that
-        # token now and returns hitCount=0. Omitting sort defaults to relevance
-        # ranking, which is what we want. (Diagnosed: bare query => 68k hits,
-        # sort=RELEVANCE => 0 hits.)
-    }
-
+def _run_query(params: dict, label: str) -> list[dict]:
+    """Run one Europe PMC query with retries. Returns the result list (may be empty)."""
     data = None
-    # Retry a couple times — EBI occasionally returns empty on a cold/loaded call.
     for attempt in range(1, 4):
         try:
             r = requests.get(EPMC_URL, params=params, headers=HEADERS, timeout=30)
             r.raise_for_status()
             data = r.json()
-            hit_count = data.get("hitCount", 0)
             results_now = data.get("resultList", {}).get("result", [])
-            log.info(f"[europepmc] attempt {attempt}: hitCount={hit_count}, "
+            log.info(f"[europepmc:{label}] attempt {attempt}: "
+                     f"hitCount={data.get('hitCount', 0)}, "
                      f"results_in_page={len(results_now)}")
             if results_now:
-                break  # got data, stop retrying
+                return results_now
         except Exception as e:
-            log.warning(f"[europepmc] attempt {attempt} failed: {e}")
+            log.warning(f"[europepmc:{label}] attempt {attempt} failed: {e}")
         import time as _t
         _t.sleep(1.0)
+    if data is None:
+        log.warning(f"[europepmc:{label}] no response after retries")
+    return []
 
-    if not data:
-        log.warning("[europepmc] no response after retries")
-        return []
 
-    results = data.get("resultList", {}).get("result", [])
+def fetch(drug: str, page_size: int = None) -> list[Evidence]:
+    """Search Europe PMC for `drug`, return papers + preprints as Evidence.
+
+    Strategy (step 4 of the synthesis upgrade — better retrieval, not more sources):
+    - Filter: HAS_ABSTRACT:Y forces papers we can actually extract from. Drops
+      the chemistry/wastewater/topology junk that lacks an abstract or has only
+      a stub. Cuts garbage roughly in half on clinical queries.
+    - TWO parallel searches: one ranked by citation count (CITED desc — surfaces
+      foundational comparison reviews like Cates 2013), one ranked by date
+      (P_PDATE_D desc — surfaces recent evidence). Merge and dedupe.
+    - This is "best of both worlds" — established + emerging — and roughly
+      mirrors how Cochrane/Elicit-style tools combine relevance and recency.
+    """
+    from core.config import config
+    page_size = page_size or config.EUROPEPMC_PAGE_SIZE
+
+    log.info(f"[europepmc] searching for {drug!r} (citation + recency, "
+             f"pageSize={page_size}) ...")
+
+    # Common: require an abstract (so extraction has something to work with).
+    # Append HAS_ABSTRACT:Y to the user query in Europe PMC's Lucene-like syntax.
+    base_q = f'({drug}) AND HAS_ABSTRACT:Y'
+
+    # Run-1: most-cited papers first. Surfaces the foundational clinical literature.
+    cited_results = _run_query(
+        {
+            "query": base_q,
+            "format": "json",
+            "pageSize": page_size,
+            "resultType": "core",
+            "sort": "CITED desc",
+        },
+        label="cited",
+    )
+
+    # Run-2: most recent papers first. Surfaces emerging evidence the cited
+    # query misses (since new papers haven't accumulated citations yet).
+    recent_results = _run_query(
+        {
+            "query": base_q,
+            "format": "json",
+            "pageSize": max(20, page_size // 2),  # smaller — citation is the higher-signal stream
+            "resultType": "core",
+            "sort": "P_PDATE_D desc",
+        },
+        label="recent",
+    )
+
+    # Merge, preserving cited-first order (so cited papers win the dedupe and
+    # appear earlier in the final list — they get higher chunk-priority in the
+    # vector store too).
+    seen = set()
+    results: list[dict] = []
+    for batch in (cited_results, recent_results):
+        for item in batch:
+            sid, _ = _best_id(item)
+            if sid in seen:
+                continue
+            seen.add(sid)
+            results.append(item)
+
     if not results:
-        log.info(f"[europepmc] no results for {drug!r} (hitCount={data.get('hitCount', 0)})")
+        log.info(f"[europepmc] no results for {drug!r} after filters")
         return []
 
     out: list[Evidence] = []

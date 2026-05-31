@@ -84,6 +84,17 @@ def fetch(drug: str, page_size: int = None) -> list[Evidence]:
         return []
 
     out: list[Evidence] = []
+    skipped_no_results = 0
+    skipped_status = 0
+
+    # States that mean "this trial has not yet produced reportable findings."
+    # We drop these because the extraction step rightly marks them as failed
+    # ("trial registration; no reported results") and they crowd out real evidence.
+    _SKIP_STATUSES = {
+        "RECRUITING", "NOT_YET_RECRUITING", "ENROLLING_BY_INVITATION",
+        "ACTIVE_NOT_RECRUITING", "WITHDRAWN", "SUSPENDED", "UNKNOWN",
+    }
+
     for study in studies:
         ps = study.get("protocolSection", {})
         id_mod = ps.get("identificationModule", {})
@@ -94,6 +105,23 @@ def fetch(drug: str, page_size: int = None) -> list[Evidence]:
         title = id_mod.get("briefTitle", "") or id_mod.get("officialTitle", "")
         body = _build_text(ps)
         if not body or not nct:
+            continue
+
+        # Drop protocol-only registrations: only keep trials whose status is
+        # completed/terminated AND that have actual results posted (hasResults).
+        # Without this filter, ~half of returned ClinicalTrials entries are
+        # protocols with no findings, which the extraction layer correctly
+        # flags as "failed" — but having them in the evidence set dilutes the
+        # vector retrieval and inflates the source list with empty rows.
+        overall = (status_mod.get("overallStatus", "") or "").upper()
+        has_results = bool(study.get("hasResults", False))
+        if overall in _SKIP_STATUSES:
+            skipped_status += 1
+            continue
+        if not has_results and overall != "COMPLETED":
+            # Allow COMPLETED trials even without hasResults (some report
+            # outcomes in the description); skip everything else with no results.
+            skipped_no_results += 1
             continue
 
         start = status_mod.get("startDateStruct", {}).get("date")
@@ -108,8 +136,13 @@ def fetch(drug: str, page_size: int = None) -> list[Evidence]:
             tier=TIER_PEER_REVIEWED,
             doc_type="trial",
             date=start,
-            extra={"sponsor": lead, "has_results": study.get("hasResults", False)},
+            extra={"sponsor": lead, "has_results": has_results,
+                   "overall_status": overall},
         ))
 
+    if skipped_status or skipped_no_results:
+        log.info(f"[clinicaltrials] filtered out {skipped_status} "
+                 f"non-completed + {skipped_no_results} no-results trials "
+                 f"(would have produced ✗ failed extractions)")
     log.info(f"[clinicaltrials] returned {len(out)} trials for {drug!r}")
     return out

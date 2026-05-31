@@ -118,3 +118,11 @@ Extract and surface statistical values — when your LLM synthesizes, explicitly
 Add a monotherapy flag — when fetching clinical trial data from ClinicalTrials.gov and Europe PMC, filter for monotherapy arms. This is a query parameter you can add to your fetch logic.
 Comparative query mode — when the user enters "ibuprofen vs aspirin," run a dedicated head-to-head search query (e.g., "ibuprofen AND aspirin AND randomized") rather than two parallel single-drug fetches. This surfaces direct comparison studies instead of inferring from separate pools.
 Dosage extraction field — add a structured dosage block to your Evidence schema. When pulling from FDA labels and trials, extract the dosing regimen explicitly and include it in the report
+
+[E5] is a paper about HIV cardiovascular risk that landed in your aspirin report. The precision filter let it through because it mentions aspirin tangentially (likely as background or as part of a comparison arm in the trial). This is a soft precision miss, not a wrong-drug citation — but it suggests your filter is occasionally permissive. Not a fix-now issue; flagging for the eval harness later.
+
+
+You and I locked in the decision last session: flow stays as a developer-only command, ask becomes the only public entry point. But we never actually built the guardrail. So flow still runs unsafely — and worse, it produces a plausible-looking report that a non-expert reader would trust. The dosing in this report is actually right, which makes it worse, not better: it teaches the user the tool is trustworthy on a run where the pipeline was functioning incorrectly.
+# now flow also updated for pdf detailed etc  suffixes
+
+search for ibuprofen vs asppirin rather than searching independent
