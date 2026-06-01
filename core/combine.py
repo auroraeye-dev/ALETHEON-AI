@@ -19,12 +19,13 @@ from core.relevance import filter_relevant
 # Each entry: (name, fetch_function). Only sources that work on your network.
 # PubMed is intentionally omitted for now (NCBI blocked on your network);
 # re-add it here in one line once you're on a network that allows NCBI.
-from sources import fda, clinicaltrials, europepmc, faers, dailymed, pubchem, chembl, pharmgkb
+from sources import fda, clinicaltrials, europepmc, faers, dailymed, pubchem, chembl, pharmgkb, semanticscholar
 
 SOURCES = [
     ("fda", fda.fetch),
     ("clinicaltrials", clinicaltrials.fetch),
     ("europepmc", europepmc.fetch),
+    ("semanticscholar", semanticscholar.fetch),
     ("faers", faers.fetch),
     ("dailymed", dailymed.fetch),
     ("pubchem", pubchem.fetch),
@@ -94,7 +95,7 @@ def fetch_head_to_head(drug1: str, drug2: str) -> list[Evidence]:
     comparator can identify and boost them. Survives gracefully if a source
     fails: we log and continue, never crash. May return [] if literature is
     genuinely thin — caller handles fallback messaging."""
-    from sources import europepmc, clinicaltrials
+    from sources import europepmc, clinicaltrials, semanticscholar
     log.info(f"[combine] head-to-head search for {drug1!r} vs {drug2!r} ...")
 
     # Build a few comparative query phrasings. Europe PMC and ClinicalTrials
@@ -146,6 +147,26 @@ def fetch_head_to_head(drug1: str, drug2: str) -> list[Evidence]:
                     out.append(ev)
         except Exception as e:
             log.warning(f"[combine] head-to-head ClinicalTrials failed for {q!r}: {e}")
+
+        # Semantic Scholar — 214M+ paper corpus reaches further back than
+        # Europe PMC's clinical ranking. This is where older monotherapy
+        # comparison trials (Cooper 1977, Bloomfield 1974, etc.) live; those
+        # are exactly the papers our screening gate has been starved for.
+        try:
+            s2_results = semanticscholar.fetch(q, limit=30)
+            for ev in s2_results:
+                key = (ev.source, ev.source_id)
+                if key in seen_ids:
+                    continue
+                text = (ev.title + " " + ev.text).lower()
+                if drug1.lower() in text and drug2.lower() in text:
+                    ev.extra = dict(ev.extra or {})
+                    ev.extra["head_to_head"] = True
+                    ev.extra["section"] = "efficacy"
+                    seen_ids.add(key)
+                    out.append(ev)
+        except Exception as e:
+            log.warning(f"[combine] head-to-head Semantic Scholar failed for {q!r}: {e}")
 
     log.info(f"[combine] head-to-head: found {len(out)} paper(s) mentioning both "
              f"{drug1!r} and {drug2!r}")

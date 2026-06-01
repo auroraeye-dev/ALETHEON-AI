@@ -36,7 +36,8 @@ class Config:
     # Per-source result limits (how many records each source fetches).
     FDA_MAX_LABELS = int(os.getenv("FDA_MAX_LABELS", "10"))
     CLINICALTRIALS_PAGE_SIZE = int(os.getenv("CLINICALTRIALS_PAGE_SIZE", "50"))
-    EUROPEPMC_PAGE_SIZE = int(os.getenv("EUROPEPMC_PAGE_SIZE", "40"))
+    EUROPEPMC_PAGE_SIZE = int(os.getenv("EUROPEPMC_PAGE_SIZE", "100"))
+    SEMANTIC_SCHOLAR_PAGE_SIZE = int(os.getenv("SEMANTIC_SCHOLAR_PAGE_SIZE", "50"))
     FAERS_TOP_N = int(os.getenv("FAERS_TOP_N", "25"))
     DAILYMED_MAX_LABELS = int(os.getenv("DAILYMED_MAX_LABELS", "3"))
 
