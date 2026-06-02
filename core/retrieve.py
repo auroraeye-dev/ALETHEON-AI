@@ -157,7 +157,58 @@ def retrieve_for_report(drug: str, depth: str = "medium", boost: dict = None) ->
         },
         "populations": {
             "query": f"{drug} use in specific populations pregnancy elderly pediatric renal hepatic",
-            "sections": ["use in specific populations", "use in specific population"],
+            "sections": ["use in specific populations", "use in specific population",
+                         "geriatric use", "pediatric use", "renal impairment",
+                         "hepatic impairment"],
+        },
+        # ---- Med-affairs reviewer additions (Jun 2026) ----
+        # These four sections were explicitly flagged as missing by a med-affairs
+        # reviewer evaluating Aletheon's single-drug template. Each one targets
+        # an FDA-label section that almost always exists (so the retrieval
+        # consistently has material to work with) plus a focused semantic query.
+        "blackbox": {
+            # FDA Boxed Warnings (the "black box" — usually the FIRST thing
+            # a med-affairs person checks). For NSAIDs this is CV thrombotic
+            # risk + GI bleed/perforation. The SPL label is "boxed warning".
+            "query": (f"{drug} boxed warning black box serious cardiovascular "
+                      f"thrombotic gastrointestinal bleeding perforation"),
+            "sections": ["boxed warning", "boxed warnings",
+                         "warnings and precautions", "warnings",
+                         "black box warning"],
+        },
+        "cv_risk": {
+            # Cardiovascular risk profile — MI/stroke/CV death, the explicit
+            # NSAID class warning. Look in W&P, CV-specific sub-sections, and
+            # pulls from peer-reviewed CV outcome trials (CLASS, TARGET, etc.)
+            "query": (f"{drug} cardiovascular risk myocardial infarction stroke "
+                      f"thrombotic events hypertension heart failure "
+                      f"CV outcomes risk"),
+            "sections": ["warnings and precautions", "warnings",
+                         "cardiovascular thrombotic events",
+                         "cardiovascular events"],
+        },
+        "pregnancy": {
+            # FDA SPL Section 8.1/8.2 — Pregnancy + Lactation. Plus the
+            # reproductive safety bits (8.3). NSAIDs have a well-known
+            # 3rd-trimester ductus closure warning so this should always
+            # surface real label content.
+            "query": (f"{drug} pregnancy lactation breastfeeding reproductive "
+                      f"safety teratogenic fetal third trimester ductus "
+                      f"arteriosus nursing mothers"),
+            "sections": ["pregnancy", "lactation", "nursing mothers",
+                         "use in specific populations", "reproductive",
+                         "females and males of reproductive potential"],
+        },
+        "pk_pd": {
+            # FDA SPL Section 12 — Clinical Pharmacology (incl. Pharmacokinetics).
+            # Cmax, Tmax, half-life, AUC, metabolism (CYP), excretion route.
+            # Med-affairs uses this to model dosing in special populations.
+            "query": (f"{drug} pharmacokinetics pharmacodynamics absorption "
+                      f"distribution metabolism excretion half-life Cmax Tmax "
+                      f"AUC bioavailability CYP cytochrome plasma"),
+            "sections": ["clinical pharmacology", "pharmacokinetics",
+                         "pharmacodynamics", "mechanism of action",
+                         "absorption", "metabolism"],
         },
     }
     for section, spec in b2_specs.items():

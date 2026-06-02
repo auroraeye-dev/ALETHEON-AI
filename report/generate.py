@@ -75,9 +75,15 @@ def _evidence_block(section_tags: dict, ordered: list[dict]) -> str:
         "interactions": "DRUG INTERACTIONS evidence",
         "mechanism": "MECHANISM OF ACTION evidence",
         "populations": "USE IN SPECIFIC POPULATIONS evidence",
+        # Med-affairs reviewer additions
+        "blackbox": "BLACK BOX evidence (FDA-boxed warnings — these are the most serious regulatory signals)",
+        "cv_risk": "CV RISK evidence (cardiovascular outcomes, thrombotic risk, hypertension, heart failure)",
+        "pregnancy": "PREGNANCY evidence (pregnancy + lactation + reproductive safety — FDA SPL Section 8)",
+        "pk_pd": "PK/PD evidence (pharmacokinetics — absorption, distribution, metabolism, excretion, half-life)",
     }
-    for section in ["overview", "efficacy", "safety", "dosing", "interactions",
-                    "mechanism", "populations", "contradiction", "preprint"]:
+    for section in ["overview", "blackbox", "safety", "cv_risk", "efficacy",
+                    "pk_pd", "dosing", "interactions", "mechanism",
+                    "pregnancy", "populations", "contradiction", "preprint"]:
         tags = section_tags.get(section, [])
         if not tags:
             continue
@@ -186,8 +192,37 @@ Do NOT place preprint findings here — preprints belong ONLY in the "Preprint /
 Emerging Evidence" section below. If a point is supported only by a preprint, leave \
 it out of Key Findings.
 
+## Black Box Warnings
+ONLY if BLACK BOX evidence is provided above. List each FDA-boxed warning as \
+a separate bullet, citing the source. For each warning include: the risk \
+(e.g. "Serious cardiovascular thrombotic events"), the affected population if \
+specified, and any specific contraindications. If the boxed-warning evidence \
+block is empty AND no obvious black-box-style warnings appear in the safety \
+or warnings-and-precautions evidence, write exactly: "No FDA boxed warnings \
+identified in current evidence." Do NOT manufacture a black box warning from \
+ordinary safety language — boxed warnings are a distinct regulatory category.
+
 ## Safety / Warnings
 Adverse effects, contraindications, risks (use SAFETY evidence), bulleted, cited.
+
+## Cardiovascular Risk Profile
+ONLY if CV RISK evidence is provided above. Summarize cardiovascular signals — \
+risk of myocardial infarction, stroke, hypertension, heart failure, thrombotic \
+events. Quote effect sizes verbatim where evidence reports them (HR, RR, OR \
+with CIs and p-values). If the evidence is regulatory-only (label warnings \
+without trial numbers), say so explicitly. If no CV-specific evidence was \
+provided, OMIT this section entirely.
+
+## Pharmacokinetics & Pharmacodynamics
+ONLY if PK/PD evidence is provided above. Cover these in bullets where \
+evidence supports them — DO NOT invent values:
+- Absorption: bioavailability, Tmax, food effect
+- Distribution: volume of distribution, protein binding
+- Metabolism: CYP enzymes involved, primary metabolites
+- Excretion: half-life, primary route (renal vs hepatic), fraction unchanged
+- Pharmacodynamics: onset of action, duration of effect
+Quote numbers verbatim. Omit any bullet for which evidence has no value. If \
+no PK/PD evidence was provided at all, OMIT this section entirely.
 
 ## Dosing & Administration
 ONLY if DOSING & ADMINISTRATION evidence is provided above. Summarize recommended \
@@ -209,10 +244,20 @@ ONLY if MECHANISM OF ACTION evidence is provided above. When it IS provided, you
 MUST create this section and explain how the drug works here (do not fold this \
 into the Summary), cited. If no mechanism evidence was provided, OMIT this section entirely.
 
+## Pregnancy, Lactation & Reproductive Safety
+ONLY if PREGNANCY evidence is provided above. Cover these where evidence supports:
+- Pregnancy category / trimester-specific warnings (cite FDA label section 8.1)
+- Lactation: drug presence in breast milk, effects on nursing infant (8.2)
+- Reproductive: fertility effects, contraception requirements (8.3)
+If the evidence has only partial coverage (e.g. pregnancy but not lactation), \
+write only the bullets the evidence supports. Do NOT invent guidance. If no \
+pregnancy/lactation evidence was provided at all, OMIT this section entirely.
+
 ## Use in Specific Populations
 ONLY if USE IN SPECIFIC POPULATIONS evidence is provided above. Summarize guidance \
-for pregnancy, elderly, pediatric, and renal/hepatic impairment, cited. If no such \
-evidence was provided, OMIT this section entirely.
+for elderly, pediatric, renal/hepatic impairment (pregnancy/lactation lives in \
+its own section above — do NOT duplicate). If no such evidence was provided, \
+OMIT this section entirely.
 
 ## Contradictions & Disagreements
 Examine the CONTRADICTION-CHECK evidence (and all other evidence) for points where \
@@ -353,7 +398,7 @@ def generate_report(drug: str, sections: dict[str, list[dict]], depth: str = "me
     # be split into several chunks, each with its own [E#] tag for in-text
     # citation. We keep those tags valid, but collapse the visible Sources list
     # so each real document appears ONCE, showing all the tags that point to it.
-    sources_lines = ["\n## Sources\n"]
+    sources_lines = ["\n## Sources\n\n"]
     by_doc = {}          # (source, source_id) -> {tags, title, tier, url}
     doc_order = []
     for c in ordered:

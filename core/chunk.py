@@ -63,6 +63,30 @@ _SECTION_PATTERNS = [
     r"how\s+supplied",
     r"description",
     r"boxed\s+warning",
+    # Med-affairs reviewer additions — FDA SPL sub-sections inside Section 8
+    # (Use in Specific Populations) and Section 12 (Clinical Pharmacology).
+    # These are real header strings that appear in DailyMed XML; without them
+    # the chunker buries pregnancy/lactation/PK content inside whichever
+    # parent section it sat in, and our targeted retrieval can't find it.
+    r"pregnancy",
+    r"lactation",
+    r"nursing\s+mothers?",
+    r"females?\s+and\s+males?\s+of\s+reproductive\s+potential",
+    r"geriatric\s+use",
+    r"pediatric\s+use",
+    r"renal\s+impairment",
+    r"hepatic\s+impairment",
+    r"pharmacokinetics?",
+    r"pharmacodynamics?",
+    r"absorption",
+    r"distribution",
+    r"metabolism",
+    r"elimination",
+    r"excretion",
+    r"cardiovascular\s+thrombotic\s+events?",
+    r"cardiovascular\s+events?",
+    r"gastrointestinal\s+bleeding",
+    r"contraindications?",
 ]
 # A header is one of the above terms on its own line / followed by a colon,
 # case-insensitive, possibly in caps.

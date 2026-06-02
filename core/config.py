@@ -64,6 +64,11 @@ class Config:
                 "interactions": _n("DEPTH_SHORT_INTERACTIONS", 2),
                 "mechanism": _n("DEPTH_SHORT_MECHANISM", 2),
                 "populations": _n("DEPTH_SHORT_POPULATIONS", 2),
+                # Med-affairs reviewer additions (Jun 2026):
+                "blackbox": _n("DEPTH_SHORT_BLACKBOX", 3),
+                "cv_risk": _n("DEPTH_SHORT_CV_RISK", 3),
+                "pregnancy": _n("DEPTH_SHORT_PREGNANCY", 3),
+                "pk_pd": _n("DEPTH_SHORT_PK_PD", 3),
             },
             "medium": {
                 "overview": _n("DEPTH_MEDIUM_OVERVIEW", 8),
@@ -76,6 +81,10 @@ class Config:
                 "interactions": _n("DEPTH_MEDIUM_INTERACTIONS", 4),
                 "mechanism": _n("DEPTH_MEDIUM_MECHANISM", 3),
                 "populations": _n("DEPTH_MEDIUM_POPULATIONS", 4),
+                "blackbox": _n("DEPTH_MEDIUM_BLACKBOX", 5),
+                "cv_risk": _n("DEPTH_MEDIUM_CV_RISK", 5),
+                "pregnancy": _n("DEPTH_MEDIUM_PREGNANCY", 5),
+                "pk_pd": _n("DEPTH_MEDIUM_PK_PD", 5),
             },
             "detailed": {
                 "overview": _n("DEPTH_DETAILED_OVERVIEW", 14),
@@ -88,6 +97,10 @@ class Config:
                 "interactions": _n("DEPTH_DETAILED_INTERACTIONS", 6),
                 "mechanism": _n("DEPTH_DETAILED_MECHANISM", 5),
                 "populations": _n("DEPTH_DETAILED_POPULATIONS", 6),
+                "blackbox": _n("DEPTH_DETAILED_BLACKBOX", 8),
+                "cv_risk": _n("DEPTH_DETAILED_CV_RISK", 8),
+                "pregnancy": _n("DEPTH_DETAILED_PREGNANCY", 8),
+                "pk_pd": _n("DEPTH_DETAILED_PK_PD", 8),
             },
         }
 
