@@ -59,8 +59,55 @@ def _section_text(el) -> str:
     return _strip(" ".join(parts))
 
 
+def _spl_richness_score(row: dict) -> int:
+    """Score an SPL search row by likely richness of clinical content.
+
+    Higher is better. We strongly prefer prescription labels (NDA/ANDA) over
+    OTC monograph products because the Rx labels carry Section 8 (Use in
+    Specific Populations), Section 12 (Clinical Pharmacology), and proper
+    Boxed Warnings — exactly what a med-affairs reviewer needs. OTC labels
+    use the consumer "Drug Facts" format which has one-line pregnancy
+    warnings and no PK content.
+
+    Signal sources (DailyMed search API returns these per row):
+      - marketing_category: "NDA", "ANDA" = prescription. "OTC MONOGRAPH",
+        "OTC MONOGRAPH FINAL" = OTC consumer label.
+      - title: consumer brand names (Equate, care one, HEB, Goodys, Rapidol)
+        are OTC repackagers; words like "TABLET", "CAPSULE", "INJECTION"
+        without a brand suggest a manufacturer Rx SPL.
+    """
+    score = 0
+    # marketing_category is the most reliable signal
+    cat = str(row.get("marketing_category") or row.get("MARKETING_CATEGORY")
+              or row.get("type") or "").upper()
+    if "NDA" in cat or "ANDA" in cat:
+        score += 100
+    elif "OTC" in cat or "MONOGRAPH" in cat:
+        score -= 50
+    # Title-based heuristic for when marketing_category is missing
+    title = (row.get("title") or row.get("TITLE") or "").upper()
+    OTC_BRAND_HINTS = ["EQUATE", "CARE ONE", "HEB", "GOODYS", "RAPIDOL",
+                       "WALMART", "TARGET", "CVS", "WALGREENS", "RITE AID",
+                       "KIRKLAND", "MEMBERS MARK", "UP&UP", "BERKLEY"]
+    if any(h in title for h in OTC_BRAND_HINTS):
+        score -= 40
+    if "INJECTION" in title or "IV " in title:
+        # Rx-only formulations: rich Section 8 + 12 content.
+        score += 30
+    if "PRESCRIPTION" in title or "RX" in title:
+        score += 20
+    return score
+
+
 def _list_spl_setids(drug: str, max_labels: int) -> list[str]:
-    """Return SETIDs for prescription SPLs matching the drug (generic name)."""
+    """Return SETIDs for SPLs matching the drug, ranked to prefer Rx labels.
+
+    Strategy: fetch a larger pool from the DailyMed search (up to 100), score
+    each row by likely clinical richness, then return the top `max_labels`.
+    This is the fix for the bug where consumer OTC labels (Equate, care one)
+    dominated and the report came back with empty Pregnancy/PK sections —
+    OTC Drug Facts labels don't have those fields."""
+    # Fetch a wider pool than we'll return; ranking does the trimming.
     params = {"drug_name": drug, "name_type": "generic", "pagesize": 100}
     try:
         r = requests.get(f"{BASE}/spls.json", params=params, headers=HEADERS, timeout=25)
@@ -71,17 +118,30 @@ def _list_spl_setids(drug: str, max_labels: int) -> list[str]:
         return []
 
     rows = data.get("data", []) or []
+    if not rows:
+        return []
+
+    # Score and rank — highest score first.
+    scored = sorted(rows, key=_spl_richness_score, reverse=True)
     setids = []
-    for row in rows:
+    rx_count = 0
+    otc_count = 0
+    for row in scored:
         sid = row.get("setid") or row.get("SETID")
-        title = (row.get("title") or row.get("TITLE") or "")
         if not sid:
             continue
-        # Prefer human prescription labels — they carry the rich sections.
-        # SPL titles usually look like "NAME (INGREDIENT) TABLET [MANUFACTURER]".
+        score = _spl_richness_score(row)
+        if score > 0:
+            rx_count += 1
+        else:
+            otc_count += 1
         setids.append(sid)
         if len(setids) >= max_labels:
             break
+
+    if setids:
+        log.info(f"[dailymed] ranked {len(rows)} SPLs, selected {len(setids)} "
+                 f"(prefer-Rx: {rx_count} Rx-leaning, {otc_count} OTC-leaning)")
     return setids
 
 

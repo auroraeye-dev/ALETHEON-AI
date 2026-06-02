@@ -93,7 +93,15 @@ def _evidence_block(section_tags: dict, ordered: list[dict]) -> str:
             if c["tag"] in tags and c["tag"] not in seen:
                 seen.add(c["tag"])
                 numbers_block = format_numbers_for_prompt(c["text"])
-                header = f"[{c['tag']}] (tier: {c['tier']}, {c['source']}:{c['source_id']})"
+                # Surface the chunk's source-section label so the LLM can
+                # apply section-aware citation discipline. For Black Box
+                # specifically, this lets it check "is this actually from a
+                # 'boxed warning' chunk or from 'warnings'/'purpose'?" before
+                # quoting.
+                src_section = c.get("section") or ""
+                header = (f"[{c['tag']}] (tier: {c['tier']}, "
+                          f"{c['source']}:{c['source_id']}"
+                          f"{', source-section: ' + src_section if src_section else ''})")
                 if numbers_block:
                     lines.append(f"{header}\n{numbers_block}\nFULL TEXT: {c['text']}")
                 else:
@@ -193,14 +201,38 @@ Emerging Evidence" section below. If a point is supported only by a preprint, le
 it out of Key Findings.
 
 ## Black Box Warnings
-ONLY if BLACK BOX evidence is provided above. List each FDA-boxed warning as \
-a separate bullet, citing the source. For each warning include: the risk \
-(e.g. "Serious cardiovascular thrombotic events"), the affected population if \
-specified, and any specific contraindications. If the boxed-warning evidence \
-block is empty AND no obvious black-box-style warnings appear in the safety \
-or warnings-and-precautions evidence, write exactly: "No FDA boxed warnings \
-identified in current evidence." Do NOT manufacture a black box warning from \
-ordinary safety language — boxed warnings are a distinct regulatory category.
+A black box warning is a SPECIFIC FDA REGULATORY CATEGORY — the most serious \
+type of warning in a prescription drug label. It appears in a black-bordered \
+box at the very top of an Rx label, NOT in any other section.
+
+STRICT RULES FOR THIS SECTION — every bullet must satisfy ALL of these:
+1. The cited chunk MUST come from a section labeled "boxed warning" or \
+"black box warning" — check the source-section tag in the chunk header.
+2. Consumer warnings like "stomach bleeding warning" on an OTC Drug Facts \
+label are NOT boxed warnings, even if they look serious. Do not upgrade them. \
+Similarly, severe warnings in Warnings and Precautions (Section 5) of an Rx \
+label are NOT boxed warnings — boxed warnings appear above all other sections.
+3. If you cannot point to a chunk with source-section "boxed warning" / \
+"black box warning", choose ONE of these refusal messages based on what was \
+actually retrieved (read the source-section tags carefully):
+   - If the retrieved labels are clearly OTC consumer products (titles like \
+     "Equate", "care one", "HEB", "Goodys", "Rapidol", or chunks tagged \
+     "purpose"/"uses"/"drug facts"): write "No FDA boxed warnings identified — \
+     the retrieved labels are OTC consumer products, which do not carry FDA \
+     boxed warnings. Prescription strength labels would be needed."
+   - If the retrieved labels are prescription labels (titles include the \
+     generic/brand drug name, source-section tags include "warnings and \
+     precautions", "indications", "dosage and administration", etc.) but \
+     none of them include a boxed warning section: write "No FDA boxed \
+     warning is present in this drug's prescribing information."
+   - If you genuinely can't tell from the retrieved chunks: write "No FDA \
+     boxed warnings identified in the retrieved evidence."
+4. Do not synthesize a boxed warning from general knowledge of the drug class \
+even if you know one exists. If the retrieved chunks don't include it, refuse.
+5. If BLACK BOX evidence IS provided AND contains chunks with source-section \
+"boxed warning", list each warning as a separate bullet citing the source. \
+Each bullet covers: the risk, the affected population, contraindications. \
+Quote the warning text verbatim where possible.
 
 ## Safety / Warnings
 Adverse effects, contraindications, risks (use SAFETY evidence), bulleted, cited.
@@ -245,19 +277,26 @@ MUST create this section and explain how the drug works here (do not fold this \
 into the Summary), cited. If no mechanism evidence was provided, OMIT this section entirely.
 
 ## Pregnancy, Lactation & Reproductive Safety
-ONLY if PREGNANCY evidence is provided above. Cover these where evidence supports:
-- Pregnancy category / trimester-specific warnings (cite FDA label section 8.1)
-- Lactation: drug presence in breast milk, effects on nursing infant (8.2)
-- Reproductive: fertility effects, contraception requirements (8.3)
+IMPORTANT: this is the section where a single sentence of real evidence beats \
+silence. If PREGNANCY evidence chunks are present above, USE THEM, even if \
+the content is just one warning line. Cover what you can from the evidence:
+- Pregnancy contraindications or category (e.g. "contraindicated in pregnancy", \
+  "Pregnancy Category X", "do not use in pregnancy", trimester-specific risks)
+- Lactation guidance (presence in breast milk, advice for nursing mothers)
+- Reproductive safety / fertility / contraception requirements
+- Specific warnings for pregnant patients (e.g. "third trimester avoidance")
 If the evidence has only partial coverage (e.g. pregnancy but not lactation), \
-write only the bullets the evidence supports. Do NOT invent guidance. If no \
-pregnancy/lactation evidence was provided at all, OMIT this section entirely.
+write only the bullets the evidence supports. Even a single "If pregnant, ask \
+a health professional before use" warning from an OTC label is reportable \
+content — quote it and cite. Do NOT invent guidance not present in the \
+evidence. Only OMIT this section entirely if the PREGNANCY evidence block \
+above is genuinely empty (no chunks were provided).
 
 ## Use in Specific Populations
-ONLY if USE IN SPECIFIC POPULATIONS evidence is provided above. Summarize guidance \
-for elderly, pediatric, renal/hepatic impairment (pregnancy/lactation lives in \
-its own section above — do NOT duplicate). If no such evidence was provided, \
-OMIT this section entirely.
+Cover guidance for elderly, pediatric, renal impairment, hepatic impairment \
+from the USE IN SPECIFIC POPULATIONS evidence. (Pregnancy/lactation has its \
+own section above — do NOT duplicate.) Same instruction as Pregnancy: a single \
+real warning is reportable. Only OMIT if the evidence block is genuinely empty.
 
 ## Contradictions & Disagreements
 Examine the CONTRADICTION-CHECK evidence (and all other evidence) for points where \
