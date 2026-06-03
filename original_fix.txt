@@ -42,3 +42,10 @@ But here's the bug: when _semantic_split runs on the body text and the body has 
 That's the bug. The chunker's text-based header detection is overriding DailyMed's pre-set section hint with incorrect sub-section labels found inside the body.
 The fix
 The fix is one line: when DailyMed gives a section hint, trust it instead of letting text-based header detection override it. Change sec = section or hint (text wins, hint is fallback) to sec = hint or section (hint wins when DailyMed knew).
+
+
+still left are :
+What's NOT fixed by this:
+
+The 419 "(untagged)" chunks still exist (those are mostly from Europe PMC abstracts that don't have section structure — they're fine to be untagged)
+The retrieval may still need a tighter section-filter for pregnancy/pk_pd specifically (using section=["pregnancy", "lactation", ...] as a hard filter in the qdrant query). If after this fix the report still shows weak content, that's the next move.

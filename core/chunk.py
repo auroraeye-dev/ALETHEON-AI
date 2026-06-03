@@ -182,7 +182,14 @@ def chunk_evidence(ev: Evidence, drug: str = "") -> list[Chunk]:
         hint = ""
     chunks = []
     for i, (section, piece) in enumerate(pieces):
-        sec = section or hint
+        # When the source pre-tagged this evidence with a section (DailyMed
+        # emits each SPL <section> as its own Evidence with extra["section"]
+        # set to e.g. "pregnancy" or "pharmacokinetics"), TRUST that label
+        # over text-based detection. The text-based detection runs on the
+        # body and can match sub-headers like "Risk Summary" or "Elimination
+        # Metabolism" — which then override the correct outer section.
+        # The hint is what the source explicitly told us; respect it.
+        sec = (hint or section or "").lower().strip()
         # Prepend the section label to the chunk text so retrieval embeddings
         # "know" this is e.g. a warnings chunk — cheap context, big precision win.
         text = f"[{sec}] {piece}" if sec else piece
