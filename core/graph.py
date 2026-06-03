@@ -65,14 +65,21 @@ class DrugState(TypedDict):
 def _fetch_node(name, fetch_fn):
     """Build a graph node from a source's fetch() function (cached)."""
     def node(state: DrugState) -> dict:
+        # Initialize the per-source outcome tracker on the first node that
+        # runs. Each fetch node records its result so the report header can
+        # surface "degraded retrieval — Europe PMC was down" to the reader.
+        # We write into core.combine's module-level dict so the existing
+        # get_last_source_outcomes() reader (in report/generate.py) Just Works.
+        import core.combine as _combine
         try:
             from core.cache import cached_fetch
             ev = cached_fetch(name, fetch_fn, state["drug"])
+            outcome = ("ok", len(ev)) if ev else ("empty", 0)
         except Exception as e:
             log.warning(f"[graph:{name}] failed: {e}")
             ev = []
-        # Return ONLY the evidence key — the add-reducer merges it with the
-        # evidence other parallel nodes produce. We never overwrite.
+            outcome = ("error", 0)
+        _combine._LAST_SOURCE_OUTCOMES[name] = outcome
         return {"evidence": ev}
     return node
 
@@ -80,6 +87,24 @@ def _fetch_node(name, fetch_fn):
 def _combine_node(state: DrugState) -> dict:
     """Fan-in: precision-filter + dedup the merged evidence from all fetch nodes."""
     from core.relevance import filter_relevant
+
+    # Degraded-mode summary: at this point all fetch nodes have written their
+    # outcomes to core.combine._LAST_SOURCE_OUTCOMES. Emit one summary line
+    # so the log is honest about which sources failed in this run.
+    import core.combine as _combine
+    outcomes = _combine._LAST_SOURCE_OUTCOMES
+    ok = [n for n, (s, _) in outcomes.items() if s == "ok"]
+    empty = [n for n, (s, _) in outcomes.items() if s == "empty"]
+    err = [n for n, (s, _) in outcomes.items() if s == "error"]
+    total = len(outcomes)
+    if empty or err:
+        log.warning(
+            f"[graph:combine] DEGRADED MODE: {len(ok)}/{total} sources "
+            f"responded with data. ok=[{', '.join(ok)}] "
+            f"empty=[{', '.join(empty)}] errored=[{', '.join(err)}]"
+        )
+    elif total > 0:
+        log.info(f"[graph:combine] all {total} sources responded with data")
 
     # A1 PRECISION GATE: drop off-drug (sibling) evidence first.
     filtered, dropped = filter_relevant(state["evidence"], state["drug"])
@@ -258,6 +283,11 @@ def run(drug: str, reset: bool = False, depth: str = "medium", critic: bool = Fa
 
     log.info(f"=== LANGGRAPH PIPELINE: {drug!r} (depth={depth}"
              + (", +critic" if critic else "") + ") ===")
+    # Reset per-run source-outcome tracker so this run's degraded-mode info
+    # isn't contaminated by the previous run's results (matters in long-lived
+    # processes; harmless for one-shot CLI invocations).
+    import core.combine as _combine
+    _combine._LAST_SOURCE_OUTCOMES = {}
     try:
         graph = build_graph(reset=reset)
         final = graph.invoke({"drug": drug, "depth": depth, "evidence": [], "combined": [],

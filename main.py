@@ -16,6 +16,8 @@ import re
 from core.models import Evidence, TIER_PEER_REVIEWED
 from core.config import config
 from core.logging_setup import log
+from dotenv import load_dotenv
+load_dotenv()
 
 
 def healthcheck():

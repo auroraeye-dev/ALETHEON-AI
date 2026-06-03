@@ -458,10 +458,29 @@ def generate_report(drug: str, sections: dict[str, list[dict]], depth: str = "me
     sources = "\n".join(sources_lines)
     n_docs = len(doc_order)
 
+    # If retrieval was degraded (some sources empty/errored), surface that in
+    # the header so the reader knows the evidence base is smaller for an
+    # external reason. The reader shouldn't have to scan the log to know.
+    degraded_note = ""
+    try:
+        from core.combine import get_last_source_outcomes
+        outcomes = get_last_source_outcomes()
+        if outcomes:
+            failed = [n for n, (s, _) in outcomes.items() if s in ("empty", "error")]
+            if failed:
+                degraded_note = (
+                    f" · **degraded retrieval** ({len(outcomes) - len(failed)}/"
+                    f"{len(outcomes)} sources responded; "
+                    f"unavailable: {', '.join(failed)})"
+                )
+    except Exception:
+        # Header degradation note is best-effort; never block the report.
+        pass
+
     header = (f"# Aletheon Report: {drug}\n\n"
               f"_Generated {datetime.now():%Y-%m-%d %H:%M} · "
               f"{len(ordered)} evidence chunks from {n_docs} sources "
-              f"(section-targeted, {depth}) · "
+              f"(section-targeted, {depth}){degraded_note} · "
               f"grounded in retrieved sources only_\n\n")
 
     report_md = header + body + "\n" + sources

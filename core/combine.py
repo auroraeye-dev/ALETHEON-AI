@@ -33,19 +33,57 @@ SOURCES = [
     ("pharmgkb", pharmgkb.fetch),
 ]
 
+# Track outcomes of the most recent fetch so the report header can surface
+# "degraded retrieval — Europe PMC was down" or similar to the reader.
+# Populated by get_all_evidence(). Format: {name: (status, count)} where
+# status is "ok" | "empty" | "error".
+_LAST_SOURCE_OUTCOMES: dict[str, tuple[str, int]] = {}
+
+
+def get_last_source_outcomes() -> dict[str, tuple[str, int]]:
+    """Return the per-source outcome map from the most recent get_all_evidence()
+    call. Use this in report headers to flag degraded retrieval to the user."""
+    return dict(_LAST_SOURCE_OUTCOMES)
+
 
 def get_all_evidence(drug: str) -> list[Evidence]:
     """Fetch from every source, merge, dedup. One dead source can't kill the run."""
     all_evidence: list[Evidence] = []
+    # Track per-source outcomes so degraded-mode runs produce an honest summary
+    # (e.g. when Europe PMC is 503 and Semantic Scholar is rate-limited, the
+    # report's evidence base shrinks for a real reason — say so).
+    source_outcomes: dict[str, tuple[str, int]] = {}  # name -> (status, count)
 
     from core.cache import cached_fetch
     for name, fetch_fn in SOURCES:
         try:
             evidence = cached_fetch(name, fetch_fn, drug)
             all_evidence.extend(evidence)
+            if evidence:
+                source_outcomes[name] = ("ok", len(evidence))
+            else:
+                # Source returned empty — could be no real results, or a soft
+                # failure logged inside the source module (DNS, 503, 429, etc).
+                source_outcomes[name] = ("empty", 0)
         except Exception as e:
-            # graceful: log and continue, never crash the whole pipeline
             log.warning(f"[combine] source {name!r} failed: {e}")
+            source_outcomes[name] = ("error", 0)
+
+    # Degraded-mode summary: count which sources responded with data.
+    ok = [n for n, (s, _) in source_outcomes.items() if s == "ok"]
+    empty = [n for n, (s, _) in source_outcomes.items() if s == "empty"]
+    err = [n for n, (s, _) in source_outcomes.items() if s == "error"]
+    n_total = len(SOURCES)
+    if empty or err:
+        # Partial retrieval — make it loud so the reader knows the evidence
+        # base is smaller than usual for an external reason, not a code bug.
+        log.warning(
+            f"[combine] DEGRADED MODE: {len(ok)}/{n_total} sources responded "
+            f"with data. ok=[{', '.join(ok)}] empty=[{', '.join(empty)}] "
+            f"errored=[{', '.join(err)}]"
+        )
+    else:
+        log.info(f"[combine] all {n_total} sources responded with data")
 
     # A1 PRECISION GATE: drop evidence that's about a DIFFERENT drug (sibling
     # leak), keeping anything genuinely about the target or ambiguous.
@@ -64,6 +102,13 @@ def get_all_evidence(drug: str) -> list[Evidence]:
             continue
         seen.add(key)
         deduped.append(ev)
+
+    # Stash the source outcomes on a module-level dict so callers (the report
+    # header) can surface "this was a degraded retrieval" to the reader.
+    # Module-level state is fine here because each ask invocation is a single
+    # pipeline run and combine.get_all_evidence runs once per drug.
+    global _LAST_SOURCE_OUTCOMES
+    _LAST_SOURCE_OUTCOMES = source_outcomes
 
     # Quick tally by tier so you can see the evidence mix.
     by_tier = {}

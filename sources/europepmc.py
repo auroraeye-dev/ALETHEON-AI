@@ -47,9 +47,21 @@ def _best_id(item: dict) -> tuple[str, str]:
 
 
 def _run_query(params: dict, label: str) -> list[dict]:
-    """Run one Europe PMC query with retries. Returns the result list (may be empty)."""
+    """Run one Europe PMC query with retries. Returns the result list (may be empty).
+
+    Retry strategy: EBI's API returns 503 during transient load spikes. Their
+    typical recovery is 30-90 seconds. Three 1-second-apart retries (the old
+    pattern) reliably missed every real recovery window. New pattern: 4
+    attempts with exponential backoff capped at 30s, totalling up to 1 minute
+    of waiting. If EBI is genuinely down for longer than that, we give up
+    cleanly so the rest of the pipeline can proceed.
+    """
+    import time as _t
     data = None
-    for attempt in range(1, 4):
+    # Backoffs (seconds) between attempts. Last value lets EBI fully recover
+    # from a typical 503 burst.
+    backoffs = [2, 8, 30]
+    for attempt in range(1, len(backoffs) + 2):
         try:
             r = requests.get(EPMC_URL, params=params, headers=HEADERS, timeout=30)
             r.raise_for_status()
@@ -62,10 +74,13 @@ def _run_query(params: dict, label: str) -> list[dict]:
                 return results_now
         except Exception as e:
             log.warning(f"[europepmc:{label}] attempt {attempt} failed: {e}")
-        import time as _t
-        _t.sleep(1.0)
+        # Sleep between attempts (but not after the final attempt).
+        if attempt <= len(backoffs):
+            wait = backoffs[attempt - 1]
+            log.info(f"[europepmc:{label}] backing off {wait}s before attempt {attempt + 1}")
+            _t.sleep(wait)
     if data is None:
-        log.warning(f"[europepmc:{label}] no response after retries")
+        log.warning(f"[europepmc:{label}] no response after retries — EBI may be down")
     return []
 
 
