@@ -27,9 +27,30 @@ def _hits_to_dicts(hits) -> list[dict]:
             "title": p.get("title", ""),
             "url": p.get("url", ""),
             "tier": p.get("tier", ""),
+            "section": p.get("section", ""),
             "score": h.score,
         })
     return out
+
+
+def _filter_substantive(chunks: list[dict], min_chars: int = 250) -> list[dict]:
+    """Drop short stub chunks that match section labels by accident.
+
+    Some sources (PharmGKB, ChEMBL, PubChem) emit very short placeholder
+    chunks that carry section labels in their text body — e.g. an 81-character
+    PharmGKB stub that reads literally "[use in specific populations] PharmGKB:
+    Atorvastatin – pharmacogenomic annotation". These stubs have high cosine
+    similarity to section-specific queries (because the section words are
+    literally in them) but contain no clinical content.
+
+    Length is a robust proxy for "real clinical content vs placeholder."
+    Real DailyMed Section 8 / Section 12 chunks are 500-2000 chars. Stubs
+    are under 200. We drop anything under min_chars (default 250) to push
+    stubs out of the retrieval candidate pool without code changes
+    elsewhere. Side-effect benefit: low-information chunks generally degrade
+    synthesis prompts even when they aren't outright stubs.
+    """
+    return [c for c in chunks if len(c.get("text", "")) >= min_chars]
 
 
 def retrieve(query: str, top_k: int = None, tier: str = None) -> list[dict]:
@@ -214,17 +235,28 @@ def retrieve_for_report(drug: str, depth: str = "medium", boost: dict = None) ->
     for section, spec in b2_specs.items():
         k = prof[section]
         qvec = embed_query(spec["query"])
+        # Pull a wider candidate pool than k so the substantive-content filter
+        # has something to work with. Sections like pregnancy/pk_pd are
+        # particularly vulnerable to stub chunks (PharmGKB / ChEMBL / PubChem
+        # placeholders) that cosine-match on stamped-in section words.
+        pool_k = max(k * 3, 12)
         # Pass 1: section-tagged chunks (precise).
-        tagged = _hits_to_dicts(
-            vectorstore.search(qvec, top_k=k, drug=drug_key, section=spec["sections"]))
+        tagged_raw = _hits_to_dicts(
+            vectorstore.search(qvec, top_k=pool_k, drug=drug_key, section=spec["sections"]))
+        tagged = _filter_substantive(tagged_raw)[:k]
         results = tagged
         # Pass 2: if the label-tagged pull was thin, top up with a plain query.
         if len(tagged) < k:
-            extra = _hits_to_dicts(
-                vectorstore.search(qvec, top_k=k, drug=drug_key))
+            extra_raw = _hits_to_dicts(
+                vectorstore.search(qvec, top_k=pool_k, drug=drug_key))
+            extra = _filter_substantive(extra_raw)
             results = _dedup(tagged + extra)[:k]
         out[section] = results
+        n_tagged_kept = len(tagged)
+        n_stubs_dropped = len(tagged_raw) - len(_filter_substantive(tagged_raw))
         log.info(f"[retrieve:{section}] {len(out[section])} chunks "
-                 f"({len(tagged)} section-tagged)")
+                 f"({n_tagged_kept} section-tagged"
+                 + (f", dropped {n_stubs_dropped} stubs" if n_stubs_dropped else "")
+                 + ")")
 
     return out
