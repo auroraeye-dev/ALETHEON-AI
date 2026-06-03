@@ -1,0 +1,44 @@
+The actual bug
+Look at the chunks-by-section-tag list:
+   chunks by section tag (top 20):
+      419  '(untagged)'
+       79  'adverse reactions'
+       78  'dosage and administration'
+       55  'drug interactions'
+       23  'indications and usage'
+       16  'use in specific populations'
+       10  'description'
+        9  'contraindications'
+        4  'mechanism of action'
+Out of 693 chunks, zero are tagged pregnancy, zero are tagged lactation, zero are tagged pharmacokinetics, zero are tagged clinical pharmacology. The chunker pattern list I shipped two builds ago should have caught these, but they're missing.
+Yet the diag_evidence.py output earlier showed DailyMed's raw text contains 'pregnancy', 'use in specific populations', 'pharmacokinetics', 'clinical pharmacology', 'nursing mothers' as section tags on the Evidence rows. DailyMed produces them. The chunker drops them.
+And look at the 8 pregnancy chunks retrieved. All 8 are PharmGKB stubs — 81-character strings that read literally "[use in specific populations] PharmGKB: Atorvastatin – pharmacogenomic annotation". That's not pregnancy content. That's a generic placeholder PharmGKB emits with the words "use in specific populations" stamped onto it.
+Same for PK/PD. The 8 retrieved chunks are: 2 PubChem chemistry stubs, 1 ChEMBL stub, 4 ClinicalTrials.gov outcome-name lists ("AUC and Cmax of 2 metabolites..."), and 1 more. None of them are the DailyMed clinical pharmacology section that contains the real PK data.
+Why this is happening
+Two failures stacked on top of each other:
+1. The chunker isn't tagging Section 8 subsections at all. My earlier patch added patterns for pregnancy, lactation, pharmacokinetics, clinical pharmacology, geriatric use, etc. to core/chunk.py's _SECTION_PATTERNS. Those patterns should produce chunks tagged with those exact labels. But the chunks-by-section list shows zero. Either:
+
+(a) The chunker patch never actually deployed (file is stale), or
+(b) The patterns are there but _split_into_sections isn't matching them — most likely because DailyMed emits each section as its OWN evidence row with extra["section"] already set, and the chunker's section-pattern matching runs on the body text which doesn't include the section header
+
+2. The retriever's filter is letting through stub-content chunks because they happen to contain the trigger words. PharmGKB's stubs have "use in specific populations" hardcoded into the text (look at chunks 1-8 of pregnancy — that exact string is in the body). So cosine similarity to "pregnancy lactation reproductive..." finds the PharmGKB stubs and they outrank the real DailyMed clinical content because the DailyMed chunks aren't tagged correctly and don't match the retriever's section filter.
+So both halves of the pipeline are broken, and they reinforce each other. The chunker drops the section tag, then the retriever can't filter to the right chunks because the right chunks aren't labelled.
+The fix
+I want to be honest: the chunker fix is the one that matters. Once it's right, retrieval will surface DailyMed clinical content instead of PharmGKB stubs.
+Let me check what's actually in the chunker right now:Ran a command, viewed a fileRan a command, viewed a fileNow I see exactly what's happening. The chunker:
+
+Calls _semantic_split(body) which returns (section, piece) tuples
+sec = section or hint — uses the parsed section if present, falls back to ev.extra["section"] from DailyMed
+Tags each chunk with sec
+
+For DailyMed, each section comes as ONE Evidence with extra["section"] set. So when the chunker processes a DailyMed Pregnancy evidence, hint = "pregnancy", and the chunks SHOULD all be tagged "pregnancy".
+But the section-tag list shows ZERO chunks tagged pregnancy. So the bug is upstream: the hint isn't being passed in, OR DailyMed isn't setting extra["section"], OR _semantic_split is returning non-empty section strings that override the hint with wrong labels.
+The third option is most likely. Look at the chunk tag counts again — 'adverse reactions', 'dosage and administration', 'drug interactions', 'use in specific populations' ARE represented. So those got through. But 'pregnancy', 'lactation', 'pharmacokinetics', 'clinical pharmacology' did not.
+What do those failing labels have in common? DailyMed's extra["section"] strips the leading numeric prefix. A DailyMed Pregnancy evidence has extra["section"] = "pregnancy". But _semantic_split runs on the body text, and inside the body, the text starts with "8.1 Pregnancy Risk Summary..." — that's "8.1 Pregnancy" which doesn't match my chunker pattern r"pregnancy" because of how _HEADER_RE is constructed (requires the header to be the entire line).
+Let me verify:Viewed 2 filesViewed 2 filesThe regex is ^[\s>#*-]*(pattern)\s*[:\-—]?\s*$ — header must be on its OWN line, with optional whitespace/>#*- prefix, optional : - — suffix.
+8.1 Pregnancy does NOT match because the 8.1  prefix is not in the allowed prefix set [\s>#*-]*. The chunker needs to allow numeric section prefixes.
+But actually, there's a more fundamental fix. Look at how DailyMed delivers content: each section is its own Evidence row, and extra["section"] is already set correctly ("pregnancy", "lactation", "pharmacokinetics", etc). The hint mechanism in the chunker is supposed to use this fallback.
+But here's the bug: when _semantic_split runs on the body text and the body has internal headers like "Elimination Metabolism" or "Risk Summary", those internal headers match _SECTION_PATTERNS (elimination, metabolism) — so _split_into_sections returns multiple (section, piece) tuples with WRONG section labels (sub-headers within the actual section). Those wrong labels override the correct hint.
+That's the bug. The chunker's text-based header detection is overriding DailyMed's pre-set section hint with incorrect sub-section labels found inside the body.
+The fix
+The fix is one line: when DailyMed gives a section hint, trust it instead of letting text-based header detection override it. Change sec = section or hint (text wins, hint is fallback) to sec = hint or section (hint wins when DailyMed knew).
