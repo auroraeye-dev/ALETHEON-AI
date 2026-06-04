@@ -33,7 +33,7 @@ def _hits_to_dicts(hits) -> list[dict]:
     return out
 
 
-def _filter_substantive(chunks: list[dict], min_chars: int = 250) -> list[dict]:
+def _filter_substantive(chunks: list[dict], min_chars: int = 150) -> list[dict]:
     """Drop short stub chunks that match section labels by accident.
 
     Some sources (PharmGKB, ChEMBL, PubChem) emit very short placeholder
@@ -43,12 +43,13 @@ def _filter_substantive(chunks: list[dict], min_chars: int = 250) -> list[dict]:
     similarity to section-specific queries (because the section words are
     literally in them) but contain no clinical content.
 
-    Length is a robust proxy for "real clinical content vs placeholder."
-    Real DailyMed Section 8 / Section 12 chunks are 500-2000 chars. Stubs
-    are under 200. We drop anything under min_chars (default 250) to push
-    stubs out of the retrieval candidate pool without code changes
-    elsewhere. Side-effect benefit: low-information chunks generally degrade
-    synthesis prompts even when they aren't outright stubs.
+    Length is a proxy for "real clinical content vs placeholder". The known
+    stubs are ~80-100 chars (PharmGKB) or ~50-150 chars (ChEMBL/PubChem
+    headers). Real DailyMed sub-section chunks start around 200 chars and run
+    up to ~2000. A threshold of 150 chars cleanly drops the stubs while
+    preserving short-but-real clinical content (single-line PK parameters,
+    one-paragraph mechanism statements). An earlier 250-char threshold was
+    over-aggressive and emptied the Mechanism and PK/PD sections.
     """
     return [c for c in chunks if len(c.get("text", "")) >= min_chars]
 
