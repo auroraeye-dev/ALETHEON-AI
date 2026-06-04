@@ -217,3 +217,4 @@ def fetch_head_to_head(drug1: str, drug2: str) -> list[Evidence]:
              f"{drug1!r} and {drug2!r}")
     return out
 
+    

@@ -62,6 +62,28 @@ def ensure_collection():
             vectors_config=VectorParams(size=EMBED_DIM, distance=Distance.COSINE),
         )
         log.info(f"[qdrant] created collection {config.QDRANT_COLLECTION!r}")
+        # Payload-field indexes on the two fields we filter by most often
+        # (drug + section). Without these, Qdrant scans every payload after
+        # the vector search; with them, it uses an indexed lookup. Cheap to
+        # build at collection-create time, and pays compounding dividends as
+        # the corpus grows beyond a few thousand chunks.
+        try:
+            from qdrant_client.models import PayloadSchemaType
+            client.create_payload_index(
+                collection_name=config.QDRANT_COLLECTION,
+                field_name="drug",
+                field_schema=PayloadSchemaType.KEYWORD,
+            )
+            client.create_payload_index(
+                collection_name=config.QDRANT_COLLECTION,
+                field_name="section",
+                field_schema=PayloadSchemaType.KEYWORD,
+            )
+            log.info(f"[qdrant] payload indexes created on 'drug' and 'section'")
+        except Exception as e:
+            # Index creation isn't critical for correctness — only for speed.
+            # If qdrant-client is older or the API differs, log and continue.
+            log.warning(f"[qdrant] payload index creation skipped: {e}")
 
 
 def index_chunks(chunks: list[Chunk], vectors: list[list[float]]):

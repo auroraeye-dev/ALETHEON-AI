@@ -535,6 +535,27 @@ def generate_report(drug: str, sections: dict[str, list[dict]], depth: str = "me
     except Exception as e:
         log.warning(f"[report] retraction check skipped: {e}")
 
+    # Citation grounding check — verifies that numeric claims in the report
+    # actually appear in their cited evidence chunks. Catches the "clinically
+    # true content cited to the wrong source" failure mode that broke trust
+    # in the OTC-boxed-warning and PharmGKB-pregnancy cases. Deterministic,
+    # no extra LLM calls.
+    try:
+        from report.citation_check import check_grounding, format_grounding_block
+        grounding_flags = check_grounding(report_md, ordered)
+        if grounding_flags:
+            block = format_grounding_block(grounding_flags)
+            # Insert before Sources, after any retraction block (so the order is
+            # Retraction → Grounding → Sources, both quality warnings adjacent)
+            report_md = report_md.replace("## Sources",
+                                          block + "\n\n## Sources", 1)
+            unsupported_n = sum(1 for f in grounding_flags if f["issue"] == "unsupported")
+            log.warning(f"[report] {unsupported_n} unsupported and "
+                        f"{len(grounding_flags) - unsupported_n} partially-grounded "
+                        f"claim(s) surfaced in the report")
+    except Exception as e:
+        log.warning(f"[report] grounding check skipped: {e}")
+
     # Numeric sanity guardrail (always on) — flag dangerous/implausible dosing
     # figures (e.g. an LLM misreading "8 tablets/day" as "48 tablets/day"). We
     # annotate rather than silently rewrite, since we don't invent the right dose.

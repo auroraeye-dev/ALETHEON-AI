@@ -1,0 +1,23 @@
+3. Your retrieval is vector-only — no keyword/hybrid
+All your retrieval goes through embed_query -> cosine search. Qdrant supports sparse+dense hybrid search. Critical safety terms like "boxed warning", "black box", specific drug names, NDC codes — these are exact match problems, not semantic ones. Clarivate-level tools use BM25 hybrid retrieval. You'd get dramatically better precision on regulatory content especially.
+4. OpenAI-only, no model routing
+config.py hardcodes gpt-4o-mini for everything — report generation, gateway, critic, screening. A huge quality jump comes from routing: use a cheap/fast model for extraction and screening (where you have hundreds of calls), and a strong model (GPT-4o or Claude Opus) only for final synthesis. Your cost stays roughly the same but report quality jumps significantly because the synthesis prompt isn't bottlenecked by a mini model.
+5. No cross-evidence synthesis — only per-chunk summarization
+Looking at your retrieval flow: retrieve_for_report returns chunks per section, and generate.py presumably summarizes each section's chunks. What Elicit does differently is cross-paper synthesis — it explicitly asks "across these 8 papers on efficacy, what is the direction of evidence, what is the heterogeneity, where do they conflict?" That requires grouping extracted findings by outcome, not just feeding chunks in order.
+6. Retraction check isn't integrated into the pipeline
+retraction_check.py exists but I don't see it called in graph.py. It's a complete module just... sitting there. For a trust-first product this should run as a mandatory node before _report_node, not optionally.
+7. No citation grounding verification
+You generate [E#] tags inline, but there's no step that verifies a claim is actually supported by the chunk it cites. Hallucinated citations are the #1 credibility killer for LLM research tools. A lightweight pass that checks "does the cited chunk's text actually contain evidence for this claim" would be a major trust differentiator.
+8. Your evaluate.py feedback loop is structural, not semantic
+It checks section length and bullet count — these are proxies for quality, not quality itself. A semantic evaluation ("did the safety section actually discuss the boxed warning?", "does the efficacy section cite an RCT?") would catch the cases your current evaluator misses. This doesn't need an LLM call — a targeted keyword/regex check against what should be there for each drug class would work.
+9. Single Qdrant collection for all drugs
+Everything shares one collection, filtered by drug=. At scale this degrades — you're paying the cosine distance cost across all indexed chunks before filtering. Drug-namespaced collections (or at minimum payload indexing on the drug field) would make retrieval dramatically faster and more precise as the store grows.
+10. No provenance on comparison findings
+In compare.py (which I haven't seen), the comparison synthesis almost certainly loses track of which specific arm of which specific trial produced a given number. Clarivate-level comparison tables preserve: paper → arm → dose → outcome → value → confidence interval. This is what separates a trustworthy comparison from a plausible-sounding one.
+
+Quick Wins You Can Ship This Week
+
+Add PubMed back (it's commented out in combine.py — your current 9-source setup is missing the most important clinical literature source)
+Call retraction_check inside _report_node
+Add payload_index on the drug field in Qdrant at collection creation time
+Route gateway/screening to gpt-4o-mini, synthesis to gpt-4o
