@@ -75,9 +75,14 @@ def _evidence_block(section_tags: dict, ordered: list[dict]) -> str:
         "interactions": "DRUG INTERACTIONS evidence",
         "mechanism": "MECHANISM OF ACTION evidence",
         "populations": "USE IN SPECIFIC POPULATIONS evidence",
+        "blackbox": "BLACKBOX (FDA boxed warning) candidate evidence",
+        "cv_risk": "CV_RISK (cardiovascular risk) evidence",
+        "pk_pd": "PK_PD (pharmacokinetics & pharmacodynamics) evidence",
+        "pregnancy": "PREGNANCY / LACTATION / REPRODUCTIVE SAFETY evidence",
     }
-    for section in ["overview", "efficacy", "safety", "dosing", "interactions",
-                    "mechanism", "populations", "contradiction", "preprint"]:
+    for section in ["overview", "efficacy", "safety", "blackbox", "cv_risk",
+                    "pk_pd", "dosing", "interactions", "mechanism",
+                    "pregnancy", "populations", "contradiction", "preprint"]:
         tags = section_tags.get(section, [])
         if not tags:
             continue
@@ -196,6 +201,28 @@ it out of Key Findings.
 ## Safety / Warnings
 Adverse effects, contraindications, risks (use SAFETY evidence), bulleted, cited.
 
+## Black Box Warnings
+ONLY if BLACKBOX evidence is provided above AND it describes an FDA boxed warning \
+(the most serious type of warning in a prescription drug label — appears in a \
+black-bordered box at the top of the official label). Quote / paraphrase the \
+boxed warning faithfully, cited. CRITICAL DISTINCTION: OTC product warnings, \
+stomach-bleed warnings, allergy warnings on OTC labels, and general "Warnings" \
+sections are NOT boxed warnings. If the evidence does NOT contain a real FDA \
+boxed warning, write EXACTLY: "No FDA boxed warning is present in this drug's \
+prescribing information." Do NOT manufacture a boxed warning from OTC label text.
+
+## Cardiovascular Risk Profile
+ONLY if CV_RISK evidence is provided above. Summarize the drug's cardiovascular \
+safety/efficacy signals from the evidence (MACE, stroke, MI, CV death rates with \
+their effect sizes and CIs), bulleted, cited. If no CV-specific evidence was \
+provided, write "Insufficient CV-specific evidence in retrieved sources."
+
+## Pharmacokinetics & Pharmacodynamics
+ONLY if PK_PD evidence is provided above. Summarize absorption, distribution, \
+metabolism, elimination, half-life, protein binding, and any clinically relevant \
+PK/PD parameters with their values verbatim from the evidence, cited. If no PK/PD \
+evidence was provided, write "Insufficient PK/PD evidence in retrieved sources."
+
 ## Dosing & Administration
 ONLY if DOSING & ADMINISTRATION evidence is provided above. Summarize recommended \
 doses, routes, frequency, and max limits, bulleted, cited. If no dosing evidence \
@@ -214,12 +241,21 @@ provided, OMIT this section entirely.
 ## Mechanism of Action
 ONLY if MECHANISM OF ACTION evidence is provided above. When it IS provided, you \
 MUST create this section and explain how the drug works here (do not fold this \
-into the Summary), cited. If no mechanism evidence was provided, OMIT this section entirely.
+into the Summary), cited. If no mechanism evidence was provided, write \
+"Insufficient mechanism-of-action evidence in retrieved sources."
+
+## Pregnancy, Lactation & Reproductive Safety
+ONLY if PREGNANCY evidence is provided above. Summarize guidance for pregnancy, \
+lactation, and reproductive safety (teratogenicity, fetal risk category, \
+contraindication status, breastfeeding recommendations) verbatim where possible, \
+cited. If no pregnancy/lactation evidence was provided, write \
+"Insufficient pregnancy/lactation evidence in retrieved sources."
 
 ## Use in Specific Populations
 ONLY if USE IN SPECIFIC POPULATIONS evidence is provided above. Summarize guidance \
-for pregnancy, elderly, pediatric, and renal/hepatic impairment, cited. If no such \
-evidence was provided, OMIT this section entirely.
+for elderly, pediatric, and renal/hepatic impairment (NOT pregnancy — that has its \
+own section above), cited. If no such evidence was provided, write \
+"Insufficient population-specific evidence in retrieved sources."
 
 ## Contradictions & Disagreements
 Examine the CONTRADICTION-CHECK evidence (and all other evidence) for points where \
