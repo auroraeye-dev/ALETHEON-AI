@@ -138,7 +138,14 @@ adjectives when a number is available. Good: "reduced events with HR 0.60 (95% \
 CI 0.31–1.17) [E14]" / "liver enzyme elevation in 62% vs 18% (p=0.009) [E7]". \
 Weak (avoid): "showed improved outcomes [E14]" / "had a lower rate [E7]". \
 For chunks without an EXTRACTED NUMBERS block (e.g. OTC labels, FAERS summaries), \
-prose is fine — only the quantitative chunks demand quantitative writing."""
+prose is fine — only the quantitative chunks demand quantitative writing.
+9. NEVER USE PLACEHOLDERS for missing values. If a sample size, p-value, CI, \
+or any other number ISN'T in the extracted finding, do NOT write "n=...", \
+"(p=?)", "[CI not reported]", "in [year]", or any similar placeholder. Instead: \
+either OMIT the parenthetical entirely, or REPHRASE the sentence so it doesn't \
+imply a number you don't have. Bad: "In a trial (n=...; P=0.005), atorvastatin \
+reduced events". Good: "In a trial of patients with acute coronary syndrome, \
+atorvastatin reduced events (P=0.005) [E8]." Or omit P if you don't have it."""
 
 USER_TEMPLATE = """Drug / query: {drug}
 
@@ -364,6 +371,37 @@ def generate_report(drug: str, sections: dict[str, list[dict]], depth: str = "me
     # the stray fallback line so the report can never self-contradict.
     body = _fix_preprint_fallback(body)
 
+    # Safeguard: catch placeholder text like "n=...", "(p=?)", "[CI not reported]"
+    # that the LLM sometimes emits despite Rule 9. These look like the model
+    # invented a number it didn't have. Strip the offending parenthetical and
+    # log a warning so we know the prompt rule isn't holding 100% of the time.
+    import re as _re
+    _placeholder_patterns = [
+        # "(n=...; P=0.005)" → "(P=0.005)" — strip just the n=... part
+        (_re.compile(r"\bn\s*=\s*\.{2,}\s*[;,]?\s*"), ""),
+        # "(n=...)" entire parenthetical → drop the whole parenthetical
+        (_re.compile(r"\s*\(\s*n\s*=\s*\.{2,}\s*\)"), ""),
+        # "[year=...]" or similar bracketed placeholders
+        (_re.compile(r"\s*\[\s*[a-z ]{2,20}=\s*\.{2,}\s*\]"), ""),
+        # "p=?" / "P=?" or "p=...; "
+        (_re.compile(r"\b[pP]\s*=\s*[?\.]{1,3}\s*[;,]?\s*"), ""),
+        # "(CI not reported)" / "[not reported]" etc.
+        (_re.compile(r"\s*[\(\[](?:CI |95% CI |HR |RR |p[- ])?not\s+reported[\)\]]",
+                     _re.IGNORECASE), ""),
+        # Empty parens left behind: "(; )" or "(  )"
+        (_re.compile(r"\s*\(\s*[;,]?\s*\)"), ""),
+    ]
+    flagged = False
+    for pat, repl in _placeholder_patterns:
+        if pat.search(body):
+            body = pat.sub(repl, body)
+            flagged = True
+    if flagged:
+        log.warning("[report] stripped placeholder text from LLM output "
+                    "(e.g. 'n=...', 'p=?', 'not reported') — prompt rule 9 "
+                    "wasn't followed perfectly. Synthesis still cited the "
+                    "available numbers; the missing-value placeholders are gone.")
+
     # Sources list — deduped by SOURCE DOCUMENT (A3). One evidence document can
     # be split into several chunks, each with its own [E#] tag for in-text
     # citation. We keep those tags valid, but collapse the visible Sources list
@@ -389,10 +427,26 @@ def generate_report(drug: str, sections: dict[str, list[dict]], depth: str = "me
     sources = "\n".join(sources_lines)
     n_docs = len(doc_order)
 
+    # Degraded-retrieval badge: when some sources failed or returned empty,
+    # surface that in the header so a reviewer sees the data limit immediately
+    # rather than discovering it in the log.
+    degraded_note = ""
+    try:
+        import core.combine as _combine
+        outcomes = dict(getattr(_combine, "_LAST_SOURCE_OUTCOMES", {}) or {})
+        if outcomes:
+            ok = [n for n, (k, _) in outcomes.items() if k == "ok"]
+            bad = [n for n, (k, _) in outcomes.items() if k != "ok"]
+            if bad:
+                degraded_note = (f" · **degraded retrieval** ({len(ok)}/{len(outcomes)} "
+                                 f"sources responded; unavailable: {', '.join(sorted(bad))})")
+    except Exception:
+        pass
+
     header = (f"# Aletheon Report: {drug}\n\n"
               f"_Generated {datetime.now():%Y-%m-%d %H:%M} · "
               f"{len(ordered)} evidence chunks from {n_docs} sources "
-              f"(section-targeted, {depth}) · "
+              f"(section-targeted, {depth}){degraded_note} · "
               f"grounded in retrieved sources only_\n\n")
 
     report_md = header + body + "\n" + sources

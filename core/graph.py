@@ -94,6 +94,25 @@ def _combine_node(state: DrugState) -> dict:
     from core.relevance import filter_relevant
     import core.combine as _combine
 
+    # Degraded-mode logging — emit one clear summary line whether everything
+    # went fine or some sources came back empty / errored. A reviewer needs to
+    # see this immediately, both in the log and as a badge on the report
+    # header.
+    outcomes = dict(_combine._LAST_SOURCE_OUTCOMES)
+    if outcomes:
+        ok_sources = [n for n, (k, _) in outcomes.items() if k == "ok"]
+        empty_sources = [n for n, (k, _) in outcomes.items() if k == "empty"]
+        errored_sources = [n for n, (k, _) in outcomes.items() if k == "error"]
+        if empty_sources or errored_sources:
+            log.warning(
+                f"[graph:combine] DEGRADED MODE: "
+                f"{len(ok_sources)}/{len(outcomes)} sources responded with data. "
+                f"ok=[{', '.join(ok_sources)}] "
+                f"empty=[{', '.join(empty_sources)}] "
+                f"errored=[{', '.join(errored_sources)}]")
+        else:
+            log.info(f"[graph:combine] all {len(outcomes)} sources responded with data")
+
     # A1 PRECISION GATE: drop off-drug (sibling) evidence first.
     raw = state["evidence"]
     filtered, dropped = filter_relevant(raw, state["drug"])
@@ -164,21 +183,25 @@ def _retrieve_node(state: DrugState) -> dict:
     from core.retrieve import retrieve_for_report
     import core.combine as _combine
     sections = retrieve_for_report(state["drug"], depth=state.get("depth", "medium"))
-    # PRISMA inclusion-stage counts: unique studies cited, total chunks cited,
-    # sections that have at least one chunk. We work from `sections` because
-    # that's exactly what gets handed to the synthesis prompt.
-    seen = set()
-    chunk_total = 0
+    # PRISMA inclusion-stage counts: unique studies cited, total UNIQUE chunks
+    # cited, sections that have at least one chunk. The chunks count must be
+    # de-duplicated across sections — the same DailyMed chunk can be returned
+    # for both 'safety' and 'dosing' queries, but PRISMA expects unique chunks.
+    seen_papers = set()
+    seen_chunks = set()
     sections_with_content = 0
     for chunks in (sections or {}).values():
-        chunk_total += len(chunks or [])
         if chunks:
             sections_with_content += 1
         for c in (chunks or []):
-            seen.add((c.get("source"), c.get("source_id")))
-    _combine._PRISMA_COUNTS["studies_included"] = len(seen)
-    _combine._PRISMA_COUNTS["reports_included"] = len(seen)
-    _combine._PRISMA_COUNTS["chunks_in_report"] = chunk_total
+            seen_papers.add((c.get("source"), c.get("source_id")))
+            # Use (source, source_id, text-hash) so the same chunk text only
+            # counts once even if multiple section queries returned it.
+            text = (c.get("text") or "")
+            seen_chunks.add((c.get("source"), c.get("source_id"), hash(text)))
+    _combine._PRISMA_COUNTS["studies_included"] = len(seen_papers)
+    _combine._PRISMA_COUNTS["reports_included"] = len(seen_papers)
+    _combine._PRISMA_COUNTS["chunks_in_report"] = len(seen_chunks)
     _combine._PRISMA_COUNTS["sections_with_evidence"] = sections_with_content
     return {"sections": sections}
 
@@ -189,9 +212,11 @@ def _report_node(state: DrugState) -> dict:
     report_md = generate_report(state["drug"], state["sections"],
                                 depth=state.get("depth", "medium"),
                                 appendices=state.get("appendices"))
-    # Splice the PRISMA flow diagram into the report after the header but
-    # before Bottom Line / Key Findings. The data was recorded by upstream
-    # nodes into _PRISMA_COUNTS; here we just render and inject.
+    # Splice the PRISMA flow diagram into the report. We place it AFTER the
+    # Summary section so page 1 leads with actual clinical content (what the
+    # reviewer wants to see first), with the methodology accessible right
+    # after as the natural "show me how" handoff. This also avoids the page-1
+    # empty-space issue where a tall Drawing pushed all content to page 2.
     try:
         from report.prisma import PrismaCounts, build_prisma_block
         counts = PrismaCounts(
@@ -209,10 +234,13 @@ def _report_node(state: DrugState) -> dict:
             sections_with_evidence=_combine._PRISMA_COUNTS["sections_with_evidence"],
         )
         prisma_block = build_prisma_block(counts)
-        # Insert just before the first major synthesis section.
-        # Try several insertion points in priority order; if none match, append
-        # at the very end of the report so the diagram is at least present.
-        insertion_markers = ["## Bottom Line", "## Summary", "## Key Findings"]
+        # Insert AFTER Summary / Bottom Line, BEFORE Key Findings.
+        # Look for the section that ENDS the Summary (which is whatever section
+        # comes right after it in the report's natural order).
+        # Priority of insertion markers (we insert PRISMA right BEFORE these):
+        insertion_markers = ["## Key Findings", "## Black Box Warnings",
+                             "## Safety / Warnings", "## Cardiovascular Risk Profile",
+                             "## Sources"]
         inserted = False
         for marker in insertion_markers:
             if marker in report_md:
