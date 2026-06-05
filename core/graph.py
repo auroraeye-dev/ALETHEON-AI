@@ -65,11 +65,6 @@ class DrugState(TypedDict):
 def _fetch_node(name, fetch_fn):
     """Build a graph node from a source's fetch() function (cached)."""
     def node(state: DrugState) -> dict:
-        # Initialize the per-source outcome tracker on the first node that
-        # runs. Each fetch node records its result so the report header can
-        # surface "degraded retrieval — Europe PMC was down" to the reader.
-        # We write into core.combine's module-level dict so the existing
-        # get_last_source_outcomes() reader (in report/generate.py) Just Works.
         import core.combine as _combine
         try:
             from core.cache import cached_fetch
@@ -79,7 +74,17 @@ def _fetch_node(name, fetch_fn):
             log.warning(f"[graph:{name}] failed: {e}")
             ev = []
             outcome = ("error", 0)
+        # Degraded-mode tracker (existing)
         _combine._LAST_SOURCE_OUTCOMES[name] = outcome
+        # PRISMA per-source count: number of UNIQUE PAPERS / LABELS, not number
+        # of internal sub-section Evidence rows. DailyMed returns ~80 rows for
+        # one SPL label (one row per <section>); a med-affairs reviewer reading
+        # the PRISMA diagram expects "labels identified", not "sections". Using
+        # source_id as the key collapses sub-sections of the same label.
+        unique_count = len({e.source_id for e in ev}) if ev else 0
+        _combine._PRISMA_COUNTS["per_source"][name] = unique_count
+        # Return ONLY the evidence key — the add-reducer merges it with the
+        # evidence other parallel nodes produce. We never overwrite.
         return {"evidence": ev}
     return node
 
@@ -87,27 +92,11 @@ def _fetch_node(name, fetch_fn):
 def _combine_node(state: DrugState) -> dict:
     """Fan-in: precision-filter + dedup the merged evidence from all fetch nodes."""
     from core.relevance import filter_relevant
-
-    # Degraded-mode summary: at this point all fetch nodes have written their
-    # outcomes to core.combine._LAST_SOURCE_OUTCOMES. Emit one summary line
-    # so the log is honest about which sources failed in this run.
     import core.combine as _combine
-    outcomes = _combine._LAST_SOURCE_OUTCOMES
-    ok = [n for n, (s, _) in outcomes.items() if s == "ok"]
-    empty = [n for n, (s, _) in outcomes.items() if s == "empty"]
-    err = [n for n, (s, _) in outcomes.items() if s == "error"]
-    total = len(outcomes)
-    if empty or err:
-        log.warning(
-            f"[graph:combine] DEGRADED MODE: {len(ok)}/{total} sources "
-            f"responded with data. ok=[{', '.join(ok)}] "
-            f"empty=[{', '.join(empty)}] errored=[{', '.join(err)}]"
-        )
-    elif total > 0:
-        log.info(f"[graph:combine] all {total} sources responded with data")
 
     # A1 PRECISION GATE: drop off-drug (sibling) evidence first.
-    filtered, dropped = filter_relevant(state["evidence"], state["drug"])
+    raw = state["evidence"]
+    filtered, dropped = filter_relevant(raw, state["drug"])
     if dropped:
         log.info(f"[graph:combine] precision filter dropped {dropped} off-drug")
 
@@ -123,6 +112,22 @@ def _combine_node(state: DrugState) -> dict:
         by_tier[ev.tier] = by_tier.get(ev.tier, 0) + 1
     log.info(f"[graph:combine] {len(deduped)} unique evidence "
              f"({', '.join(f'{k}: {v}' for k, v in sorted(by_tier.items()))})")
+
+    # PRISMA stage 2 counts — work in UNIQUE PAPER space (source, source_id),
+    # not Evidence-row space. The per-source counts upstream are already in
+    # paper space; mixing the two would make the diagram fail to balance.
+    raw_paper_ids = {(e.source, e.source_id) for e in raw}
+    filtered_paper_ids = {(e.source, e.source_id) for e in filtered}
+    off_drug_papers = raw_paper_ids - filtered_paper_ids
+    # 'Duplicates removed' = unique-paper count in `filtered` minus unique-paper
+    # count in `deduped`. Since dedup keys on (source, source_id), the
+    # difference is zero in practice — but the slot stays in PRISMA for
+    # transparency.
+    duplicates_at_dedup = len(filtered_paper_ids) - len(deduped)
+    _combine._PRISMA_COUNTS["off_drug_removed"] = len(off_drug_papers)
+    _combine._PRISMA_COUNTS["duplicates_removed"] = max(0, duplicates_at_dedup)
+    _combine._PRISMA_COUNTS["records_screened"] = len(deduped)
+
     # Write to `combined` (replace semantics) — NOT back into `evidence`, which
     # has an add-reducer that would re-append and double the list.
     return {"combined": deduped}
@@ -157,15 +162,68 @@ def _index_node(state: DrugState) -> dict:
 
 def _retrieve_node(state: DrugState) -> dict:
     from core.retrieve import retrieve_for_report
+    import core.combine as _combine
     sections = retrieve_for_report(state["drug"], depth=state.get("depth", "medium"))
+    # PRISMA inclusion-stage counts: unique studies cited, total chunks cited,
+    # sections that have at least one chunk. We work from `sections` because
+    # that's exactly what gets handed to the synthesis prompt.
+    seen = set()
+    chunk_total = 0
+    sections_with_content = 0
+    for chunks in (sections or {}).values():
+        chunk_total += len(chunks or [])
+        if chunks:
+            sections_with_content += 1
+        for c in (chunks or []):
+            seen.add((c.get("source"), c.get("source_id")))
+    _combine._PRISMA_COUNTS["studies_included"] = len(seen)
+    _combine._PRISMA_COUNTS["reports_included"] = len(seen)
+    _combine._PRISMA_COUNTS["chunks_in_report"] = chunk_total
+    _combine._PRISMA_COUNTS["sections_with_evidence"] = sections_with_content
     return {"sections": sections}
 
 
 def _report_node(state: DrugState) -> dict:
     from report.generate import generate_report, save_report
+    import core.combine as _combine
     report_md = generate_report(state["drug"], state["sections"],
                                 depth=state.get("depth", "medium"),
                                 appendices=state.get("appendices"))
+    # Splice the PRISMA flow diagram into the report after the header but
+    # before Bottom Line / Key Findings. The data was recorded by upstream
+    # nodes into _PRISMA_COUNTS; here we just render and inject.
+    try:
+        from report.prisma import PrismaCounts, build_prisma_block
+        counts = PrismaCounts(
+            per_source=dict(_combine._PRISMA_COUNTS["per_source"]),
+            duplicates_removed=_combine._PRISMA_COUNTS["duplicates_removed"],
+            off_drug_removed=_combine._PRISMA_COUNTS["off_drug_removed"],
+            records_screened=_combine._PRISMA_COUNTS["records_screened"],
+            reports_assessed=_combine._PRISMA_COUNTS["reports_assessed"],
+            reports_excluded=dict(_combine._PRISMA_COUNTS["reports_excluded"]),
+            reports_sought=_combine._PRISMA_COUNTS["records_screened"],
+            reports_retrieved=_combine._PRISMA_COUNTS["records_screened"],
+            studies_included=_combine._PRISMA_COUNTS["studies_included"],
+            reports_included=_combine._PRISMA_COUNTS["reports_included"],
+            chunks_in_report=_combine._PRISMA_COUNTS["chunks_in_report"],
+            sections_with_evidence=_combine._PRISMA_COUNTS["sections_with_evidence"],
+        )
+        prisma_block = build_prisma_block(counts)
+        # Insert just before the first major synthesis section.
+        # Try several insertion points in priority order; if none match, append
+        # at the very end of the report so the diagram is at least present.
+        insertion_markers = ["## Bottom Line", "## Summary", "## Key Findings"]
+        inserted = False
+        for marker in insertion_markers:
+            if marker in report_md:
+                report_md = report_md.replace(marker, prisma_block + "\n" + marker, 1)
+                inserted = True
+                break
+        if not inserted:
+            report_md = report_md + "\n\n" + prisma_block
+    except Exception as e:
+        log.warning(f"[graph:report] PRISMA injection failed: {e}")
+
     path = save_report(state["drug"], report_md)
     return {"report": report_md, "report_path": path}
 
@@ -281,13 +339,13 @@ def run(drug: str, reset: bool = False, depth: str = "medium", critic: bool = Fa
     from core.errors import validate_drug_name, AletheonError, PipelineError
     drug = validate_drug_name(drug)  # may raise InvalidDrugName
 
+    # Reset module-level PRISMA + degraded-mode state — avoids leakage across
+    # multiple pipeline runs in a harness or test session.
+    from core.combine import _reset_prisma_state
+    _reset_prisma_state()
+
     log.info(f"=== LANGGRAPH PIPELINE: {drug!r} (depth={depth}"
              + (", +critic" if critic else "") + ") ===")
-    # Reset per-run source-outcome tracker so this run's degraded-mode info
-    # isn't contaminated by the previous run's results (matters in long-lived
-    # processes; harmless for one-shot CLI invocations).
-    import core.combine as _combine
-    _combine._LAST_SOURCE_OUTCOMES = {}
     try:
         graph = build_graph(reset=reset)
         final = graph.invoke({"drug": drug, "depth": depth, "evidence": [], "combined": [],

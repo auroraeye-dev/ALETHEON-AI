@@ -75,15 +75,9 @@ def _evidence_block(section_tags: dict, ordered: list[dict]) -> str:
         "interactions": "DRUG INTERACTIONS evidence",
         "mechanism": "MECHANISM OF ACTION evidence",
         "populations": "USE IN SPECIFIC POPULATIONS evidence",
-        # Med-affairs reviewer additions
-        "blackbox": "BLACK BOX evidence (FDA-boxed warnings — these are the most serious regulatory signals)",
-        "cv_risk": "CV RISK evidence (cardiovascular outcomes, thrombotic risk, hypertension, heart failure)",
-        "pregnancy": "PREGNANCY evidence (pregnancy + lactation + reproductive safety — FDA SPL Section 8)",
-        "pk_pd": "PK/PD evidence (pharmacokinetics — absorption, distribution, metabolism, excretion, half-life)",
     }
-    for section in ["overview", "blackbox", "safety", "cv_risk", "efficacy",
-                    "pk_pd", "dosing", "interactions", "mechanism",
-                    "pregnancy", "populations", "contradiction", "preprint"]:
+    for section in ["overview", "efficacy", "safety", "dosing", "interactions",
+                    "mechanism", "populations", "contradiction", "preprint"]:
         tags = section_tags.get(section, [])
         if not tags:
             continue
@@ -93,15 +87,7 @@ def _evidence_block(section_tags: dict, ordered: list[dict]) -> str:
             if c["tag"] in tags and c["tag"] not in seen:
                 seen.add(c["tag"])
                 numbers_block = format_numbers_for_prompt(c["text"])
-                # Surface the chunk's source-section label so the LLM can
-                # apply section-aware citation discipline. For Black Box
-                # specifically, this lets it check "is this actually from a
-                # 'boxed warning' chunk or from 'warnings'/'purpose'?" before
-                # quoting.
-                src_section = c.get("section") or ""
-                header = (f"[{c['tag']}] (tier: {c['tier']}, "
-                          f"{c['source']}:{c['source_id']}"
-                          f"{', source-section: ' + src_section if src_section else ''})")
+                header = f"[{c['tag']}] (tier: {c['tier']}, {c['source']}:{c['source_id']})"
                 if numbers_block:
                     lines.append(f"{header}\n{numbers_block}\nFULL TEXT: {c['text']}")
                 else:
@@ -200,61 +186,8 @@ Do NOT place preprint findings here — preprints belong ONLY in the "Preprint /
 Emerging Evidence" section below. If a point is supported only by a preprint, leave \
 it out of Key Findings.
 
-## Black Box Warnings
-A black box warning is a SPECIFIC FDA REGULATORY CATEGORY — the most serious \
-type of warning in a prescription drug label. It appears in a black-bordered \
-box at the very top of an Rx label, NOT in any other section.
-
-STRICT RULES FOR THIS SECTION — every bullet must satisfy ALL of these:
-1. The cited chunk MUST come from a section labeled "boxed warning" or \
-"black box warning" — check the source-section tag in the chunk header.
-2. Consumer warnings like "stomach bleeding warning" on an OTC Drug Facts \
-label are NOT boxed warnings, even if they look serious. Do not upgrade them. \
-Similarly, severe warnings in Warnings and Precautions (Section 5) of an Rx \
-label are NOT boxed warnings — boxed warnings appear above all other sections.
-3. If you cannot point to a chunk with source-section "boxed warning" / \
-"black box warning", choose ONE of these refusal messages based on what was \
-actually retrieved (read the source-section tags carefully):
-   - If the retrieved labels are clearly OTC consumer products (titles like \
-     "Equate", "care one", "HEB", "Goodys", "Rapidol", or chunks tagged \
-     "purpose"/"uses"/"drug facts"): write "No FDA boxed warnings identified — \
-     the retrieved labels are OTC consumer products, which do not carry FDA \
-     boxed warnings. Prescription strength labels would be needed."
-   - If the retrieved labels are prescription labels (titles include the \
-     generic/brand drug name, source-section tags include "warnings and \
-     precautions", "indications", "dosage and administration", etc.) but \
-     none of them include a boxed warning section: write "No FDA boxed \
-     warning is present in this drug's prescribing information."
-   - If you genuinely can't tell from the retrieved chunks: write "No FDA \
-     boxed warnings identified in the retrieved evidence."
-4. Do not synthesize a boxed warning from general knowledge of the drug class \
-even if you know one exists. If the retrieved chunks don't include it, refuse.
-5. If BLACK BOX evidence IS provided AND contains chunks with source-section \
-"boxed warning", list each warning as a separate bullet citing the source. \
-Each bullet covers: the risk, the affected population, contraindications. \
-Quote the warning text verbatim where possible.
-
 ## Safety / Warnings
 Adverse effects, contraindications, risks (use SAFETY evidence), bulleted, cited.
-
-## Cardiovascular Risk Profile
-ONLY if CV RISK evidence is provided above. Summarize cardiovascular signals — \
-risk of myocardial infarction, stroke, hypertension, heart failure, thrombotic \
-events. Quote effect sizes verbatim where evidence reports them (HR, RR, OR \
-with CIs and p-values). If the evidence is regulatory-only (label warnings \
-without trial numbers), say so explicitly. If no CV-specific evidence was \
-provided, OMIT this section entirely.
-
-## Pharmacokinetics & Pharmacodynamics
-ONLY if PK/PD evidence is provided above. Cover these in bullets where \
-evidence supports them — DO NOT invent values:
-- Absorption: bioavailability, Tmax, food effect
-- Distribution: volume of distribution, protein binding
-- Metabolism: CYP enzymes involved, primary metabolites
-- Excretion: half-life, primary route (renal vs hepatic), fraction unchanged
-- Pharmacodynamics: onset of action, duration of effect
-Quote numbers verbatim. Omit any bullet for which evidence has no value. If \
-no PK/PD evidence was provided at all, OMIT this section entirely.
 
 ## Dosing & Administration
 ONLY if DOSING & ADMINISTRATION evidence is provided above. Summarize recommended \
@@ -276,27 +209,10 @@ ONLY if MECHANISM OF ACTION evidence is provided above. When it IS provided, you
 MUST create this section and explain how the drug works here (do not fold this \
 into the Summary), cited. If no mechanism evidence was provided, OMIT this section entirely.
 
-## Pregnancy, Lactation & Reproductive Safety
-IMPORTANT: this is the section where a single sentence of real evidence beats \
-silence. If PREGNANCY evidence chunks are present above, USE THEM, even if \
-the content is just one warning line. Cover what you can from the evidence:
-- Pregnancy contraindications or category (e.g. "contraindicated in pregnancy", \
-  "Pregnancy Category X", "do not use in pregnancy", trimester-specific risks)
-- Lactation guidance (presence in breast milk, advice for nursing mothers)
-- Reproductive safety / fertility / contraception requirements
-- Specific warnings for pregnant patients (e.g. "third trimester avoidance")
-If the evidence has only partial coverage (e.g. pregnancy but not lactation), \
-write only the bullets the evidence supports. Even a single "If pregnant, ask \
-a health professional before use" warning from an OTC label is reportable \
-content — quote it and cite. Do NOT invent guidance not present in the \
-evidence. Only OMIT this section entirely if the PREGNANCY evidence block \
-above is genuinely empty (no chunks were provided).
-
 ## Use in Specific Populations
-Cover guidance for elderly, pediatric, renal impairment, hepatic impairment \
-from the USE IN SPECIFIC POPULATIONS evidence. (Pregnancy/lactation has its \
-own section above — do NOT duplicate.) Same instruction as Pregnancy: a single \
-real warning is reportable. Only OMIT if the evidence block is genuinely empty.
+ONLY if USE IN SPECIFIC POPULATIONS evidence is provided above. Summarize guidance \
+for pregnancy, elderly, pediatric, and renal/hepatic impairment, cited. If no such \
+evidence was provided, OMIT this section entirely.
 
 ## Contradictions & Disagreements
 Examine the CONTRADICTION-CHECK evidence (and all other evidence) for points where \
@@ -388,6 +304,21 @@ def generate_report(drug: str, sections: dict[str, list[dict]], depth: str = "me
     from report.extract import (extract_findings, findings_to_synthesis_block,
                                 findings_to_compact_table, findings_to_section_table)
     findings = extract_findings(ordered)
+    # PRISMA stage 3 (Eligibility): how many reports went into extraction, how
+    # many came back with complete/partial findings, how many failed. We track
+    # the actual reasons so a reviewer can audit them.
+    try:
+        import core.combine as _combine
+        complete = sum(1 for f in findings if getattr(f, "extraction_quality", "") == "complete")
+        partial = sum(1 for f in findings if getattr(f, "extraction_quality", "") == "partial")
+        failed = len(findings) - complete - partial
+        _combine._PRISMA_COUNTS["reports_assessed"] = len(findings)
+        excluded = dict(_combine._PRISMA_COUNTS.get("reports_excluded", {}) or {})
+        if failed:
+            excluded["Failed LLM extraction (no parseable findings)"] = failed
+        _combine._PRISMA_COUNTS["reports_excluded"] = excluded
+    except Exception as e:
+        log.warning(f"[report] PRISMA extraction counts skipped: {e}")
     # Map source_id -> [E#] tag (first chunk encountered for that source).
     sid_to_tag: dict = {}
     for c in ordered:
@@ -458,29 +389,10 @@ def generate_report(drug: str, sections: dict[str, list[dict]], depth: str = "me
     sources = "\n".join(sources_lines)
     n_docs = len(doc_order)
 
-    # If retrieval was degraded (some sources empty/errored), surface that in
-    # the header so the reader knows the evidence base is smaller for an
-    # external reason. The reader shouldn't have to scan the log to know.
-    degraded_note = ""
-    try:
-        from core.combine import get_last_source_outcomes
-        outcomes = get_last_source_outcomes()
-        if outcomes:
-            failed = [n for n, (s, _) in outcomes.items() if s in ("empty", "error")]
-            if failed:
-                degraded_note = (
-                    f" · **degraded retrieval** ({len(outcomes) - len(failed)}/"
-                    f"{len(outcomes)} sources responded; "
-                    f"unavailable: {', '.join(failed)})"
-                )
-    except Exception:
-        # Header degradation note is best-effort; never block the report.
-        pass
-
     header = (f"# Aletheon Report: {drug}\n\n"
               f"_Generated {datetime.now():%Y-%m-%d %H:%M} · "
               f"{len(ordered)} evidence chunks from {n_docs} sources "
-              f"(section-targeted, {depth}){degraded_note} · "
+              f"(section-targeted, {depth}) · "
               f"grounded in retrieved sources only_\n\n")
 
     report_md = header + body + "\n" + sources
@@ -534,27 +446,6 @@ def generate_report(drug: str, sections: dict[str, list[dict]], depth: str = "me
                         f"surfaced in the report")
     except Exception as e:
         log.warning(f"[report] retraction check skipped: {e}")
-
-    # Citation grounding check — verifies that numeric claims in the report
-    # actually appear in their cited evidence chunks. Catches the "clinically
-    # true content cited to the wrong source" failure mode that broke trust
-    # in the OTC-boxed-warning and PharmGKB-pregnancy cases. Deterministic,
-    # no extra LLM calls.
-    try:
-        from report.citation_check import check_grounding, format_grounding_block
-        grounding_flags = check_grounding(report_md, ordered)
-        if grounding_flags:
-            block = format_grounding_block(grounding_flags)
-            # Insert before Sources, after any retraction block (so the order is
-            # Retraction → Grounding → Sources, both quality warnings adjacent)
-            report_md = report_md.replace("## Sources",
-                                          block + "\n\n## Sources", 1)
-            unsupported_n = sum(1 for f in grounding_flags if f["issue"] == "unsupported")
-            log.warning(f"[report] {unsupported_n} unsupported and "
-                        f"{len(grounding_flags) - unsupported_n} partially-grounded "
-                        f"claim(s) surfaced in the report")
-    except Exception as e:
-        log.warning(f"[report] grounding check skipped: {e}")
 
     # Numeric sanity guardrail (always on) — flag dangerous/implausible dosing
     # figures (e.g. an LLM misreading "8 tablets/day" as "48 tablets/day"). We

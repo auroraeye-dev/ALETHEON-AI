@@ -19,13 +19,51 @@ from core.relevance import filter_relevant
 # Each entry: (name, fetch_function). Only sources that work on your network.
 # PubMed is intentionally omitted for now (NCBI blocked on your network);
 # re-add it here in one line once you're on a network that allows NCBI.
-from sources import fda, clinicaltrials, europepmc, faers, dailymed, pubchem, chembl, pharmgkb, semanticscholar
+from sources import fda, clinicaltrials, europepmc, faers, dailymed, pubchem, chembl, pharmgkb
+
+
+# Module-level state populated by core/graph.py during pipeline execution.
+# Acts as the bridge from LangGraph nodes (parallel, hard to share state via
+# TypedDict) to the report-generation step downstream.
+
+# Per-source outcome for degraded-mode logging: name -> ("ok"|"empty"|"error", count)
+_LAST_SOURCE_OUTCOMES: dict = {}
+
+# PRISMA 2020 v2 counts, populated stage-by-stage. Reset at the start of every
+# pipeline run to avoid cross-run leakage in harnesses.
+_PRISMA_COUNTS: dict = {
+    "per_source": {},               # source name -> unique paper/label count
+    "off_drug_removed": 0,
+    "duplicates_removed": 0,
+    "records_screened": 0,
+    "reports_assessed": 0,          # papers entering extraction
+    "reports_excluded": {},         # reason -> count
+    "studies_included": 0,
+    "reports_included": 0,
+    "chunks_in_report": 0,
+    "sections_with_evidence": 0,
+}
+
+
+def _reset_prisma_state():
+    """Call at start of pipeline run to avoid stale counts from previous run."""
+    _LAST_SOURCE_OUTCOMES.clear()
+    _PRISMA_COUNTS["per_source"] = {}
+    _PRISMA_COUNTS["off_drug_removed"] = 0
+    _PRISMA_COUNTS["duplicates_removed"] = 0
+    _PRISMA_COUNTS["records_screened"] = 0
+    _PRISMA_COUNTS["reports_assessed"] = 0
+    _PRISMA_COUNTS["reports_excluded"] = {}
+    _PRISMA_COUNTS["studies_included"] = 0
+    _PRISMA_COUNTS["reports_included"] = 0
+    _PRISMA_COUNTS["chunks_in_report"] = 0
+    _PRISMA_COUNTS["sections_with_evidence"] = 0
+
 
 SOURCES = [
     ("fda", fda.fetch),
     ("clinicaltrials", clinicaltrials.fetch),
     ("europepmc", europepmc.fetch),
-    ("semanticscholar", semanticscholar.fetch),
     ("faers", faers.fetch),
     ("dailymed", dailymed.fetch),
     ("pubchem", pubchem.fetch),
@@ -33,57 +71,19 @@ SOURCES = [
     ("pharmgkb", pharmgkb.fetch),
 ]
 
-# Track outcomes of the most recent fetch so the report header can surface
-# "degraded retrieval — Europe PMC was down" or similar to the reader.
-# Populated by get_all_evidence(). Format: {name: (status, count)} where
-# status is "ok" | "empty" | "error".
-_LAST_SOURCE_OUTCOMES: dict[str, tuple[str, int]] = {}
-
-
-def get_last_source_outcomes() -> dict[str, tuple[str, int]]:
-    """Return the per-source outcome map from the most recent get_all_evidence()
-    call. Use this in report headers to flag degraded retrieval to the user."""
-    return dict(_LAST_SOURCE_OUTCOMES)
-
 
 def get_all_evidence(drug: str) -> list[Evidence]:
     """Fetch from every source, merge, dedup. One dead source can't kill the run."""
     all_evidence: list[Evidence] = []
-    # Track per-source outcomes so degraded-mode runs produce an honest summary
-    # (e.g. when Europe PMC is 503 and Semantic Scholar is rate-limited, the
-    # report's evidence base shrinks for a real reason — say so).
-    source_outcomes: dict[str, tuple[str, int]] = {}  # name -> (status, count)
 
     from core.cache import cached_fetch
     for name, fetch_fn in SOURCES:
         try:
             evidence = cached_fetch(name, fetch_fn, drug)
             all_evidence.extend(evidence)
-            if evidence:
-                source_outcomes[name] = ("ok", len(evidence))
-            else:
-                # Source returned empty — could be no real results, or a soft
-                # failure logged inside the source module (DNS, 503, 429, etc).
-                source_outcomes[name] = ("empty", 0)
         except Exception as e:
+            # graceful: log and continue, never crash the whole pipeline
             log.warning(f"[combine] source {name!r} failed: {e}")
-            source_outcomes[name] = ("error", 0)
-
-    # Degraded-mode summary: count which sources responded with data.
-    ok = [n for n, (s, _) in source_outcomes.items() if s == "ok"]
-    empty = [n for n, (s, _) in source_outcomes.items() if s == "empty"]
-    err = [n for n, (s, _) in source_outcomes.items() if s == "error"]
-    n_total = len(SOURCES)
-    if empty or err:
-        # Partial retrieval — make it loud so the reader knows the evidence
-        # base is smaller than usual for an external reason, not a code bug.
-        log.warning(
-            f"[combine] DEGRADED MODE: {len(ok)}/{n_total} sources responded "
-            f"with data. ok=[{', '.join(ok)}] empty=[{', '.join(empty)}] "
-            f"errored=[{', '.join(err)}]"
-        )
-    else:
-        log.info(f"[combine] all {n_total} sources responded with data")
 
     # A1 PRECISION GATE: drop evidence that's about a DIFFERENT drug (sibling
     # leak), keeping anything genuinely about the target or ambiguous.
@@ -102,13 +102,6 @@ def get_all_evidence(drug: str) -> list[Evidence]:
             continue
         seen.add(key)
         deduped.append(ev)
-
-    # Stash the source outcomes on a module-level dict so callers (the report
-    # header) can surface "this was a degraded retrieval" to the reader.
-    # Module-level state is fine here because each ask invocation is a single
-    # pipeline run and combine.get_all_evidence runs once per drug.
-    global _LAST_SOURCE_OUTCOMES
-    _LAST_SOURCE_OUTCOMES = source_outcomes
 
     # Quick tally by tier so you can see the evidence mix.
     by_tier = {}
@@ -140,7 +133,7 @@ def fetch_head_to_head(drug1: str, drug2: str) -> list[Evidence]:
     comparator can identify and boost them. Survives gracefully if a source
     fails: we log and continue, never crash. May return [] if literature is
     genuinely thin — caller handles fallback messaging."""
-    from sources import europepmc, clinicaltrials, semanticscholar
+    from sources import europepmc, clinicaltrials
     log.info(f"[combine] head-to-head search for {drug1!r} vs {drug2!r} ...")
 
     # Build a few comparative query phrasings. Europe PMC and ClinicalTrials
@@ -193,28 +186,6 @@ def fetch_head_to_head(drug1: str, drug2: str) -> list[Evidence]:
         except Exception as e:
             log.warning(f"[combine] head-to-head ClinicalTrials failed for {q!r}: {e}")
 
-        # Semantic Scholar — 214M+ paper corpus reaches further back than
-        # Europe PMC's clinical ranking. This is where older monotherapy
-        # comparison trials (Cooper 1977, Bloomfield 1974, etc.) live; those
-        # are exactly the papers our screening gate has been starved for.
-        try:
-            s2_results = semanticscholar.fetch(q, limit=30)
-            for ev in s2_results:
-                key = (ev.source, ev.source_id)
-                if key in seen_ids:
-                    continue
-                text = (ev.title + " " + ev.text).lower()
-                if drug1.lower() in text and drug2.lower() in text:
-                    ev.extra = dict(ev.extra or {})
-                    ev.extra["head_to_head"] = True
-                    ev.extra["section"] = "efficacy"
-                    seen_ids.add(key)
-                    out.append(ev)
-        except Exception as e:
-            log.warning(f"[combine] head-to-head Semantic Scholar failed for {q!r}: {e}")
-
     log.info(f"[combine] head-to-head: found {len(out)} paper(s) mentioning both "
              f"{drug1!r} and {drug2!r}")
     return out
-
-    

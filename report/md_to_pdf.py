@@ -305,6 +305,62 @@ def render_markdown_body(md_text: str, styles: dict, callbacks: dict | None = No
                 if content.strip():
                     story.append(Paragraph(f"<i>{content}</i>", styles["body"]))
             continue
+        elif tag == "pre":
+            # Fenced code block. Special case: if this contains the PRISMA flow
+            # marker (the first line is "PRISMA-Style Evidence Flow" or any
+            # heading containing "PRISMA"), substitute the native ReportLab
+            # Drawing flowable for crisp output instead of monospace ASCII.
+            code_text = "".join(elem.itertext()) or ""
+            is_prisma = ("PRISMA" in code_text.split("\n")[0] if code_text else False) \
+                or "PRISMA" in code_text[:120]
+            if is_prisma:
+                try:
+                    from report.prisma import build_prisma_drawing
+                    import core.combine as _combine
+                    from report.prisma import PrismaCounts
+                    pc = _combine._PRISMA_COUNTS
+                    counts = PrismaCounts(
+                        per_source=dict(pc.get("per_source", {})),
+                        duplicates_removed=pc.get("duplicates_removed", 0),
+                        off_drug_removed=pc.get("off_drug_removed", 0),
+                        records_screened=pc.get("records_screened", 0),
+                        reports_assessed=pc.get("reports_assessed", 0),
+                        reports_excluded=dict(pc.get("reports_excluded", {})),
+                        reports_sought=pc.get("records_screened", 0),
+                        reports_retrieved=pc.get("records_screened", 0),
+                        studies_included=pc.get("studies_included", 0),
+                        reports_included=pc.get("reports_included", 0),
+                        chunks_in_report=pc.get("chunks_in_report", 0),
+                        sections_with_evidence=pc.get("sections_with_evidence", 0),
+                    )
+                    drawing = build_prisma_drawing(counts)
+                    if drawing is not None:
+                        # If we're near the end of a page, ReportLab will push
+                        # the Drawing entirely to the next page, leaving a big
+                        # empty gap. CondPageBreak triggers a clean page break
+                        # ONLY if the Drawing can't fit in the remaining space.
+                        # The threshold = drawing height + a bit of margin.
+                        from reportlab.platypus import CondPageBreak, KeepTogether
+                        story.append(CondPageBreak(drawing.height + 18))
+                        story.append(Spacer(1, 4))
+                        story.append(KeepTogether(drawing))
+                        story.append(Spacer(1, 6))
+                        continue
+                except Exception as e:
+                    # Fall back to monospace rendering if anything goes wrong
+                    pass
+            # Default: render the code text as a monospace paragraph block.
+            # Escape special chars for ReportLab.
+            escaped = (code_text.replace("&", "&amp;")
+                                .replace("<", "&lt;")
+                                .replace(">", "&gt;")
+                                .replace("\n", "<br/>"))
+            story.append(Spacer(1, 4))
+            story.append(Paragraph(
+                f'<font face="Courier" size="7">{escaped}</font>',
+                styles["body"]))
+            story.append(Spacer(1, 6))
+            continue
         else:
             # Unknown block — fall back to plain paragraph.
             html_inner = _inner_html(elem)
