@@ -33,25 +33,47 @@ def _hits_to_dicts(hits) -> list[dict]:
     return out
 
 
+
+# Sources known to emit short non-clinical placeholder chunks. Only chunks
+# from these sources are subject to the length-based stub filter — DailyMed
+# / FDA / EuropePMC chunks are always kept regardless of length, because
+# short paragraphs from those sources are often the most important content
+# (boxed warnings, pregnancy advisories, dosing limits).
+_STUB_PRONE_SOURCES = {"pharmgkb", "chembl", "pubchem"}
+
+
 def _filter_substantive(chunks: list[dict], min_chars: int = 150) -> list[dict]:
-    """Drop short stub chunks that match section labels by accident.
+    """Drop short stub chunks from sources known to emit them.
 
-    Some sources (PharmGKB, ChEMBL, PubChem) emit very short placeholder
-    chunks that carry section labels in their text body — e.g. an 81-character
-    PharmGKB stub that reads literally "[use in specific populations] PharmGKB:
-    Atorvastatin – pharmacogenomic annotation". These stubs have high cosine
-    similarity to section-specific queries (because the section words are
-    literally in them) but contain no clinical content.
+    Background: PharmGKB / ChEMBL / PubChem emit short placeholder chunks
+    that carry section labels in their text body — e.g. an 81-character
+    PharmGKB stub that reads "[use in specific populations] PharmGKB:
+    Atorvastatin – pharmacogenomic annotation". These have high cosine
+    similarity to section-specific queries because the section words are
+    literally in them, but contain no clinical content.
 
-    Length is a proxy for "real clinical content vs placeholder". The known
-    stubs are ~80-100 chars (PharmGKB) or ~50-150 chars (ChEMBL/PubChem
-    headers). Real DailyMed sub-section chunks start around 200 chars and run
-    up to ~2000. A threshold of 150 chars cleanly drops the stubs while
-    preserving short-but-real clinical content (single-line PK parameters,
-    one-paragraph mechanism statements). An earlier 250-char threshold was
-    over-aggressive and emptied the Mechanism and PK/PD sections.
+    An earlier version of this filter was length-only (any chunk under
+    150 chars dropped). That over-rejected DailyMed pregnancy / PK / black-box
+    paragraphs that happen to be short but are clinically critical — a
+    DailyMed Section 8.1 paragraph saying "Atorvastatin can cause fetal harm.
+    Discontinue when pregnancy is recognized" is ~120 chars and is exactly
+    the content a med-affairs reviewer needs.
+
+    Source-aware policy:
+      - Chunks from stub-prone sources: dropped if under min_chars.
+      - Chunks from clinical/regulatory sources (DailyMed, FDA, EuropePMC,
+        ClinicalTrials, Semantic Scholar, FAERS): ALWAYS KEPT regardless
+        of length. We trust that those sources don't emit junk and that
+        a short paragraph is signal, not noise.
     """
-    return [c for c in chunks if len(c.get("text", "")) >= min_chars]
+    out = []
+    for c in chunks:
+        src = (c.get("source") or "").lower()
+        text_len = len(c.get("text", ""))
+        if src in _STUB_PRONE_SOURCES and text_len < min_chars:
+            continue  # drop this stub
+        out.append(c)
+    return out
 
 
 def retrieve(query: str, top_k: int = None, tier: str = None) -> list[dict]:
