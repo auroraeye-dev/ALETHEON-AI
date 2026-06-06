@@ -440,13 +440,15 @@ def findings_to_compact_table(findings: list[ExtractedFinding],
             short_src += "…"
         short_src = short_src.replace("|", "/").replace("\n", " ")
         key = f.key_outcome_1 or f.safety_signal or "—"
-        # Slightly higher limits (120 / 130) than before (75 / 80) — gives a
-        # full headline stat + comparator + CI room to fit without forcing
-        # truncation on most rows. PDF cell auto-wraps if a row is unusually
-        # long; that's still acceptable for the audit appendix.
+        # Higher limits (200 / 200) than before (120 / 130) — gives a full
+        # statistical claim including effect size, CI, comparator, AND p-value
+        # room to fit without forcing truncation. The PFS comparison line we
+        # care about ("28·8 vs 6·8 months ... HR 0·33 ... p<0·0001") is ~192
+        # chars and now fits fully. PDF cell auto-wraps if a row is unusually
+        # long; that's acceptable for the audit appendix.
         lines.append(f"| {f.tag} | {q} | {short_src} | "
                      f"{clip(f.study_type, 25)} | {clip(f.n, 20)} | "
-                     f"{clip(key, 120)} | {clip(f.conclusion, 130)} |")
+                     f"{clip(key, 200)} | {clip(f.conclusion, 200)} |")
     if n_failed:
         lines.append(f"\n_{n_failed} additional paper(s) retrieved had no "
                      f"extractable findings (e.g. trial registrations with no "
@@ -481,8 +483,8 @@ def findings_to_section_table(findings: list[ExtractedFinding],
         for f in findings:
             if f.extraction_quality == "failed" or not f.safety_signal:
                 continue
-            short = _clip_word(f.title or f.source_id, 40)
-            sig = _clip_word(f.safety_signal, 160)
+            short = _clip_word(f.title or f.source_id, 50)
+            sig = _clip_word(f.safety_signal, 220)
             lines.append(f"| {f.tag} | {short} | {sig} |")
             any_row = True
         if not any_row:
@@ -497,8 +499,8 @@ def findings_to_section_table(findings: list[ExtractedFinding],
     for f in findings:
         if f.extraction_quality == "failed" or not f.key_outcome_1:
             continue
-        short = _clip_word(f.title or f.source_id, 40)
-        ko = _clip_word(f.key_outcome_1, 160)
+        short = _clip_word(f.title or f.source_id, 50)
+        ko = _clip_word(f.key_outcome_1, 220)
         lines.append(f"| {f.tag} | {short} | {_clip_word(f.study_type, 20)} | {ko} |")
         any_row = True
     if not any_row:

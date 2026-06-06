@@ -136,18 +136,27 @@ def _parse_spl(setid: str, drug: str) -> list[Evidence]:
         # in the dedup step downstream. Falls back to a numeric counter if the
         # title is empty (rare).
         slug = re.sub(r"\W+", "_", clean).strip("_")[:50] or f"sec{len(out)}"
-        # Disambiguate slug collisions within the same SPL (e.g. two
-        # sub-sections both titled "Risk Summary" under different parents).
+        # Disambiguate slug collisions within the same SPL.
         original_slug = slug
         counter = 2
         while slug in seen_slugs:
             slug = f"{original_slug}_{counter}"
             counter += 1
         seen_slugs.add(slug)
+        # Build a meaningful display title — "DailyMed: Pharmacokinetics" rather
+        # than the SPL's verbose legal-boilerplate title ("These highlights do
+        # not include all the information needed to use X safely..."), which
+        # was identical across every section of a label and made the Source
+        # column in report tables useless for distinguishing rows. The section
+        # name is what a reviewer wants to see at a glance.
+        display_section = re.sub(r"^[\d.\s]+", "", sec_title).strip()
+        if not display_section:
+            display_section = slug.replace("_", " ").title()
+        title_str = f"DailyMed: {display_section}"
         ev = Evidence(
             source="dailymed",
             source_id=f"{setid}#{slug}",
-            title=f"DailyMed: {doc_title}",
+            title=title_str,
             text=(f"{sec_title}\n{body}" if sec_title else body),
             url=f"https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid={setid}",
             tier=TIER_REGULATORY,
