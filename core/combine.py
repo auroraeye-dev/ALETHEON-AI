@@ -19,7 +19,8 @@ from core.relevance import filter_relevant
 # Each entry: (name, fetch_function). Only sources that work on your network.
 # PubMed is intentionally omitted for now (NCBI blocked on your network);
 # re-add it here in one line once you're on a network that allows NCBI.
-from sources import fda, clinicaltrials, europepmc, faers, dailymed, pubchem, chembl, pharmgkb
+from sources import (fda, clinicaltrials, europepmc, faers, dailymed,
+                     pubchem, chembl, pharmgkb, semanticscholar)
 
 
 # Module-level state populated by core/graph.py during pipeline execution.
@@ -69,6 +70,7 @@ SOURCES = [
     ("pubchem", pubchem.fetch),
     ("chembl", chembl.fetch),
     ("pharmgkb", pharmgkb.fetch),
+    ("semanticscholar", semanticscholar.fetch),
 ]
 
 
