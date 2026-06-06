@@ -1,0 +1,27 @@
+Issue 1 — PharmGKB rows polluting Key Findings table (E8-E13)
+Six rows of "PharmGKB provides pharmacogenomic annotations..." boilerplate appearing in the Key Findings sub-table. The fix was written but extract.py wasn't copied correctly. Confirm with grep -n "STUB_SOURCES" ~/Desktop/aletheon_cl_code/report/extract.py.
+Issue 2 — Dosing section shows 48 tablets/24h
+[E53] is FDA Label: Aspirin Low Dose — an OTC effervescent combination product label, not the standard aspirin monograph. The dosing retrieval is pulling the wrong label. The sanity checker correctly flags it but the section still shows the number. Fix: the dosing synthesis prompt needs to explicitly prefer prescription monograph dosing over OTC combination product labels.
+Issue 3 — Pharmacokinetics & Pharmacodynamics says "Insufficient evidence"
+PK/PD data for aspirin definitely exists (half-life ~15-20 min for salicylate, protein binding 80-90%, hepatic metabolism, renal excretion). The PK retrieval section is returning 8 chunks but none are being used. Root cause: the chunks are likely DailyMed clinical pharmacology sections but they're being dropped as stubs before reaching synthesis.
+Issue 4 — Use in Specific Populations says "Insufficient evidence"
+Same stub-drop problem — [retrieve:populations] 2 chunks (0 section-tagged, dropped 16 stubs). 16 stubs dropped is too aggressive. The stub threshold is cutting real population guidance from FDA labels.
+Issue 5 — Pregnancy section thin
+Only two bullets, both from OTC labels. The DailyMed prescription label has a full PLLR pregnancy section. Same root cause as Issue 4 — stubs being over-dropped.
+Issue 6 — Comparative Effectiveness section missing entirely
+For aspirin this is expected since Collins/Pierce papers are ibuprofen-specific. But for aspirin there should be comparisons vs clopidogrel, vs warfarin, vs P2Y12 inhibitors — and those papers ARE in the index (E35, E39, E32). The comparative retrieval query needs aspirin-specific comparators.
+Issue 7 — Key Findings table has too many Reye's syndrome label rows
+E4, E7, E14, E15, E17, E18, E21, E22, E23, E24, E28, E29 — 12 FDA/DailyMed label rows all saying the same Reye's syndrome warning. The table should deduplicate by finding type, not by source.
+
+Issue 1 — S2 still not using clinical suffix for pembrolizumab
+The log shows [semanticscholar] searching for 'pembrolizumab' (limit=50) — no clinical suffix. The new semanticscholar.py still isn't on disk. Same file copy issue as before.
+Issue 2 — Black Box Warnings says "No FDA boxed warning"
+This is wrong. Pembrolizumab (Keytruda) has serious immune-mediated adverse reactions warnings prominently in the label. The retrieval got 8 chunks tagged blackbox but the synthesis LLM is incorrectly concluding there's no boxed warning. The synthesis prompt needs to distinguish between "no boxed warning section" and "has warnings and precautions that are severe."
+Issue 3 — Cardiovascular Risk says "Insufficient evidence"
+For an immunotherapy this is actually correct — pembrolizumab doesn't have a primary CV risk profile. But the section header appearing with "Insufficient" looks weak. It should either be omitted entirely when empty or say something meaningful like "No class-specific cardiovascular risk identified; monitor for immune-mediated myocarditis."
+Issue 4 — Key Findings table still has DailyMed section-chunk rows
+E8 (DailyMed: Sec59), E30/E32 (DailyMed: CLINICAL PHARMACOLOGY) appearing in Key Findings. These are label section fragments, not study findings. They shouldn't be in the Key Findings sub-table.
+Issue 5 — Dosing shows units notation ("395 mg/4,800 units")
+The KEYTRUDA QLEX is a subcutaneous formulation measured in units. The report mixes the SC and IV dosing without clearly distinguishing which is which. Confusing for a reader.
+Issue 6 — Drug Interactions says "Insufficient evidence"
+Pembrolizumab has important interactions (corticosteroids for irAE management, immunosuppressants). These are in the label — the interactions retrieval query isn't matching them because it's looking for "drug interactions" section tags, but pembrolizumab's label puts this under "Warnings and Precautions."
