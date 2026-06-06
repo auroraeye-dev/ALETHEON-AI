@@ -360,6 +360,14 @@ def generate_report(drug: str, sections: dict[str, list[dict]], depth: str = "me
         if failed:
             excluded["Failed LLM extraction (no parseable findings)"] = failed
         _combine._PRISMA_COUNTS["reports_excluded"] = excluded
+        # PRISMA stage 4 (Included): only papers with at least one extracted
+        # finding (complete OR partial) count as "Included in synthesis". This
+        # OVERRIDES the count from _retrieve_node, which was based on unique
+        # source_ids in the retrieved chunks — that produced included > assessed
+        # because raw chunks reach synthesis even when extraction failed. The
+        # correct definition matches PRISMA: included = assessed - excluded.
+        _combine._PRISMA_COUNTS["studies_included"] = complete + partial
+        _combine._PRISMA_COUNTS["reports_included"] = complete + partial
     except Exception as e:
         log.warning(f"[report] PRISMA extraction counts skipped: {e}")
     # Map source_id -> [E#] tag (first chunk encountered for that source).
