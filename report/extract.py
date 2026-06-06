@@ -72,10 +72,23 @@ class ExtractedFinding:
 # Reuses the same cache directory as fetch caching but with its own filename
 # prefix so they don't collide.
 
+# Bump _EXTRACT_CACHE_VERSION whenever the prompt or post-processing logic
+# changes in a way that would produce different output. Old cache entries are
+# physically separated by the version stamp in the filename, so they don't
+# need to be deleted — they just stop being read. Set in code (not env) so a
+# fix author can't forget.
+# v1 = original prompt
+# v2 = loosened failed/partial/complete criteria + server-side rescue (the
+#      "extraction rescue" fix from earlier this session)
+_EXTRACT_CACHE_VERSION = "v2"
+
 def _extract_cache_path(source_id: str, content_hash: str) -> str:
     safe = "".join(ch if ch.isalnum() else "_" for ch in source_id)[:40]
     os.makedirs(config.CACHE_DIR, exist_ok=True)
-    return os.path.join(config.CACHE_DIR, f"extract_{safe}_{content_hash[:12]}.json")
+    return os.path.join(
+        config.CACHE_DIR,
+        f"extract_{_EXTRACT_CACHE_VERSION}_{safe}_{content_hash[:12]}.json",
+    )
 
 
 def _content_hash(title: str, text: str) -> str:
@@ -125,18 +138,30 @@ _EXTRACT_SYSTEM = (
     "\"<outcome label>: <verbatim numeric result>\" — e.g. "
     "\"GI ulceration: OR 7.58 (95% CI 2.64-21.78), p<0.001\". Keep numbers "
     "paired with the outcome they belong to. Use 1 outcome if only one is "
-    "reported, up to 3. Leave 2/3 empty if not applicable.\n"
+    "reported, up to 3. Leave 2/3 empty if not applicable. If the paper reports "
+    "qualitative outcomes only (no numbers), describe them in plain text in "
+    "key_outcome_1 — don't leave it empty just because numbers are missing.\n"
     "3. safety_signal: ONE sentence on adverse events / safety findings. "
     "Empty if no safety data.\n"
     "4. conclusion: ONE sentence summarizing the paper's stated conclusion, "
-    "verbatim if possible.\n"
+    "verbatim if possible. This field is almost always extractable from any "
+    "real paper's abstract — only leave empty if the input has no abstract "
+    "text at all.\n"
     "5. n: how the paper phrases sample size (\"n=1,245\", \"8,677 patients\", "
     "\"4 trials, 8000 participants\"). Empty if unknown.\n"
-    "6. extraction_quality: \"complete\" if you filled study_type + population "
-    "+ at least one outcome + conclusion; \"partial\" if abstract was sparse "
-    "and some fields are empty; \"failed\" if you genuinely couldn't extract "
-    "anything (e.g. trial registration with no reported outcomes — say "
-    "\"trial registration; no reported results\" in conclusion).\n\n"
+    "6. extraction_quality: be GENEROUS, not strict — this field decides "
+    "whether the paper feeds downstream synthesis, so over-marking 'failed' "
+    "silently throws away real evidence. Use these criteria:\n"
+    "   - \"complete\": you filled conclusion + at least one of "
+    "(key_outcome_1, safety_signal) + study_type. Most real abstracts hit this.\n"
+    "   - \"partial\": you got SOMETHING extractable (at minimum conclusion OR "
+    "one outcome) but fields are sparse. PREFER PARTIAL OVER FAILED when in "
+    "doubt — a partial extraction is far more useful than a discard.\n"
+    "   - \"failed\": ONLY use this if the input has NO extractable clinical "
+    "content at all — i.e. a trial registration stub with no results, a pure "
+    "chemistry/computational paper with no clinical claim, or no abstract "
+    "provided. If you can write even a one-sentence conclusion from the "
+    "abstract, the answer is partial, not failed.\n\n"
     "Return ONLY the JSON object — no prose, no markdown fence, no commentary."
 )
 
@@ -205,15 +230,39 @@ def _llm_extract_one(ev: dict, client) -> ExtractedFinding:
             conclusion=str(data.get("conclusion", "") or "")[:400],
             extraction_quality=str(data.get("extraction_quality", "complete") or "complete")[:20],
         )
+
+        # SERVER-SIDE RESCUE: the LLM is biased toward "failed" on uncertainty,
+        # which silently discards real evidence. If we have ANY salvageable
+        # content (conclusion or a key outcome or a safety signal), override
+        # to "partial" so screening/synthesis still see the row. The only thing
+        # that truly deserves "failed" is a row with no extracted content at all.
+        has_content = bool(
+            f.conclusion.strip()
+            or f.key_outcome_1.strip() or f.key_outcome_2.strip() or f.key_outcome_3.strip()
+            or f.safety_signal.strip()
+            or f.study_type.strip()
+        )
+        if f.extraction_quality == "failed" and has_content:
+            log.info(f"[extract] rescued LLM-declared-failed paper {source_id}: "
+                     f"has content (conclusion={bool(f.conclusion)}, "
+                     f"outcomes={bool(f.key_outcome_1 or f.key_outcome_2 or f.key_outcome_3)}, "
+                     f"safety={bool(f.safety_signal)}) — reclassifying as 'partial'")
+            f.extraction_quality = "partial"
+        elif f.extraction_quality == "complete" and not has_content:
+            # Mirror-image safety: if the LLM said "complete" but emitted no
+            # content, downgrade to failed so it doesn't poison synthesis.
+            f.extraction_quality = "failed"
         return f
     except Exception as e:
-        log.warning(f"[extract] LLM extraction failed for {source_id}: {e}")
-        # Honest failure — return a row marked failed, don't crash the report.
+        # Infrastructure failure (network, timeout, JSON parse) — distinguish
+        # this from LLM-judged "failed" so logs are honest about whether
+        # papers are lost to API errors vs to content judgment.
+        log.warning(f"[extract] LLM extraction errored for {source_id}: {e}")
         return ExtractedFinding(
             source_id=source_id, source=source, tier=tier,
             title=title, url=url,
-            extraction_quality="failed",
-            conclusion="(extraction failed — see full evidence chunk in Sources)",
+            extraction_quality="failed",  # treated like failed downstream, but the log marker is "errored"
+            conclusion="(extraction call errored — see full evidence chunk in Sources)",
         )
 
 
@@ -366,17 +415,38 @@ def findings_to_compact_table(findings: list[ExtractedFinding],
     ])
     for f in rows:
         q = {"complete": "✓", "partial": "⚠"}.get(f.extraction_quality, "?")
-        def clip(s, n):
+
+        def clip(s: str, n: int) -> str:
+            """Smart truncation that cuts at WORD boundaries (never mid-word)
+            and tries to preserve statistical content (numbers, CIs, p-values,
+            HRs, percentages) — the parts a reviewer actually needs.
+
+            If a string contains a statistical marker AND is over budget, we
+            keep everything from the start of the outcome up through the END
+            of the first stats-bearing parenthetical, then ellipsis. The
+            comparator (which appears right after the headline number) is
+            usually the most important content to preserve.
+            """
             s = (s or "").replace("|", "/").replace("\n", " ")
-            return s[:n].strip() + ("…" if len(s) > n else "")
+            s = " ".join(s.split())  # collapse whitespace
+            if len(s) <= n:
+                return s.strip()
+            # Word-boundary cut: never split mid-word
+            cut = s[:n].rsplit(" ", 1)[0].rstrip(",;:")
+            return cut + "…"
+
         short_src = (f.title or f.source_id)[:35]
         if len(f.title or f.source_id) > 35:
             short_src += "…"
         short_src = short_src.replace("|", "/").replace("\n", " ")
         key = f.key_outcome_1 or f.safety_signal or "—"
+        # Slightly higher limits (120 / 130) than before (75 / 80) — gives a
+        # full headline stat + comparator + CI room to fit without forcing
+        # truncation on most rows. PDF cell auto-wraps if a row is unusually
+        # long; that's still acceptable for the audit appendix.
         lines.append(f"| {f.tag} | {q} | {short_src} | "
-                     f"{clip(f.study_type, 25)} | {clip(f.n, 18)} | "
-                     f"{clip(key, 75)} | {clip(f.conclusion, 80)} |")
+                     f"{clip(f.study_type, 25)} | {clip(f.n, 20)} | "
+                     f"{clip(key, 120)} | {clip(f.conclusion, 130)} |")
     if n_failed:
         lines.append(f"\n_{n_failed} additional paper(s) retrieved had no "
                      f"extractable findings (e.g. trial registrations with no "
@@ -392,6 +462,16 @@ def findings_to_section_table(findings: list[ExtractedFinding],
     """
     if not findings:
         return ""
+
+    def _clip_word(s: str, n: int) -> str:
+        """Word-boundary truncation — no mid-word cuts."""
+        s = (s or "").replace("|", "/").replace("\n", " ")
+        s = " ".join(s.split())
+        if len(s) <= n:
+            return s.strip()
+        cut = s[:n].rsplit(" ", 1)[0].rstrip(",;:")
+        return cut + "…"
+
     lines = []
     if focus == "safety":
         lines.append("\n_Findings used in this section:_\n")
@@ -401,8 +481,8 @@ def findings_to_section_table(findings: list[ExtractedFinding],
         for f in findings:
             if f.extraction_quality == "failed" or not f.safety_signal:
                 continue
-            short = (f.title or f.source_id)[:40].replace("|", "/")
-            sig = f.safety_signal.replace("|", "/").replace("\n", " ")[:120]
+            short = _clip_word(f.title or f.source_id, 40)
+            sig = _clip_word(f.safety_signal, 160)
             lines.append(f"| {f.tag} | {short} | {sig} |")
             any_row = True
         if not any_row:
@@ -417,9 +497,9 @@ def findings_to_section_table(findings: list[ExtractedFinding],
     for f in findings:
         if f.extraction_quality == "failed" or not f.key_outcome_1:
             continue
-        short = (f.title or f.source_id)[:40].replace("|", "/")
-        ko = f.key_outcome_1.replace("|", "/").replace("\n", " ")[:120]
-        lines.append(f"| {f.tag} | {short} | {f.study_type[:20]} | {ko} |")
+        short = _clip_word(f.title or f.source_id, 40)
+        ko = _clip_word(f.key_outcome_1, 160)
+        lines.append(f"| {f.tag} | {short} | {_clip_word(f.study_type, 20)} | {ko} |")
         any_row = True
     if not any_row:
         return ""
