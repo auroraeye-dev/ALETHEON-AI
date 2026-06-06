@@ -102,3 +102,9 @@ def main(drug: str):
 if __name__ == "__main__":
     drug = sys.argv[1] if len(sys.argv) > 1 else "atorvastatin"
     main(drug)
+
+    """head -80 /tmp/sections.txt > /tmp/diag_part1.txt
+sed -n '/pregnancy.*chunks reached/,$p' /tmp/sections.txt | head -120 > /tmp/diag_part2_pregnancy.txt
+sed -n "/'pk_pd'.*chunks reached/,$p" /tmp/sections.txt | head -120 > /tmp/diag_part3_pkpd.txt
+sed -n "/'populations'.*chunks reached/,$p" /tmp/sections.txt | head -120 > /tmp/diag_part4_populations.txt
+open /tmp/diag_part1.txt /tmp/diag_part2_pregnancy.txt /tmp/diag_part3_pkpd.txt /tmp/diag_part4_populations.txt"""
