@@ -175,11 +175,6 @@ def _index_node(state: DrugState) -> dict:
             f"Evidence for {state['drug']!r} could not be processed into "
             f"searchable chunks.")
     vectors = embed_texts([c.text for c in chunks])
-    vectorstore.reset()  # per-run cleanup: each main.py invocation starts
-                         # with a fresh collection. Keeps local Qdrant fast
-                         # (warning kicks in past 20K points) and prevents
-                         # stale chunks from previous drug runs polluting
-                         # retrieval. Cache layer is separate and unaffected.
     vectorstore.index_chunks(chunks, vectors)
     return {}
 
