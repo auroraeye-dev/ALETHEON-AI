@@ -1,0 +1,7 @@
+One small issue I noticed (not blocking)
+PRISMA shows:
+Reports assessed for eligibility (n = 30)
+Reports excluded with reasons: Failed LLM extraction (n = 13)
+Studies included in review (n = 34)
+Logically included should be ≤ assessed, but here it's 34 > 30. That's because assessed counts extraction calls (one per paper that went through LLM extraction) while included counts unique source documents whose chunks reached the synthesis prompt (some made it in via raw chunks without extraction). It's a definitional inconsistency in the PRISMA accounting, not a data integrity bug.
+Easy fix later: make studies_included count only papers that had at least one extraction finding. Not urgent — the numbers in the report itself are accurate, just the PRISMA bookkeeping is slightly off.

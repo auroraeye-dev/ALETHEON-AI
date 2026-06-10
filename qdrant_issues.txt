@@ -1,0 +1,12 @@
+Problem 1 — compare design broken by my reset. When compare runs run_flow(d1) then run_flow(d2):
+
+d1 pipeline: reset → index d1 chunks → d1 in store ✓
+d2 pipeline: reset wipes d1! → index d2 → only d2 in store
+Then retrieve_for_report(d1) finds zero chunks for d1 because they were wiped
+Even if no concurrent error fires, the comparison is silently broken
+
+Problem 2 — stale lock files. The "another instance accessing" error happens when a previous 
+Python process didn't release its Qdrant lock cleanly (e.g., killed with Ctrl-C, crashed). 
+
+The atexit handler doesn't fire in those cases, leaving a .lock file in data/qdrant/. Next 
+invocation can't open the path

@@ -27,7 +27,9 @@ FAERS_URL = "https://api.fda.gov/drug/event.json"
 HEADERS = {"User-Agent": "Aletheon/0.1 (research prototype)"}
 
 
-def fetch(drug: str, top_n: int = 25) -> list[Evidence]:
+def fetch(drug: str, top_n: int = None) -> list[Evidence]:
+    from core.config import config
+    top_n = top_n or config.FAERS_TOP_N
     """Fetch the most-reported adverse reactions for `drug` from FAERS.
 
     Returns a single Evidence summarizing the top reported reactions (real_world

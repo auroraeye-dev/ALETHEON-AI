@@ -1,0 +1,25 @@
+Advance RAG we should adopt 
+
+naive, advance, modular rag 
+TfidfVectorizer imports the class that converts text documents into a
+matrix of TF-IDF features. Term Frequency-Inverse Document
+Frequency (TF-IDF)
+
+Furthermore, a large proportion of this data is unstructured and
+found in unpredictable and complex ways. Fortunately, many
+platforms, such as Pinecone, OpenAI, Chroma, and Activeloop,
+provide ready-to-use tools to process and store this jungle of data
+
+balance between enhancing the retriever and the
+generator in a RAG-driven generative AI ecosystem depends on a
+project’s specific requirements and goals.
+
+arametric models, where
+knowledge is embedded indirectly in the weights, non-
+parametric data in RAG allows us to see and use the actual data
+for each output.
+
+Using libraries like spaCy and NLTK, it preprocesses
+texts to reduce noise, expands terms with synonyms from WordNet,
+and computes similarity based on the semantic richness of the
+expanded vocabulary

@@ -52,6 +52,48 @@ def _close_client():
 atexit.register(_close_client)
 
 
+def clear_storage() -> None:
+    """Process-startup cleanup: wipe the local Qdrant storage entirely.
+
+    Called once at CLI entry (main.py:_dispatch) before any pipeline runs.
+
+    Why this exists:
+    - The vector index is fully derived from the source cache. Wiping it
+      between invocations costs nothing (re-embedding from already-cached
+      evidence is fast) and gives us deterministic state every time.
+    - Prevents the 20K-points local-mode warning from accumulating across
+      runs.
+    - Handles stale lock files left behind when a previous process was
+      killed with Ctrl-C or crashed before atexit could close the client.
+      Without this, the next run hits 'Storage folder ... is already
+      accessed by another instance of Qdrant client.'
+    - For multi-drug runs (compare), the storage is wiped ONCE at process
+      start; both drug pipelines then co-index into the same collection,
+      separated by the 'drug' payload filter at retrieve time. (Per-
+      pipeline reset would clobber drug 1 when drug 2 indexes.)
+    """
+    import shutil
+    global _client
+    # Close any existing client so it releases its file handles on the
+    # storage directory (otherwise rmtree on macOS will keep stale handles).
+    if _client is not None:
+        try:
+            _client.close()
+        except Exception:
+            pass
+        _client = None
+    if os.path.isdir(QDRANT_PATH):
+        try:
+            shutil.rmtree(QDRANT_PATH)
+            log.info("[qdrant] storage cleared (fresh process)")
+        except Exception as e:
+            log.warning(f"[qdrant] storage clear failed: {e}")
+    # Recreate the empty directory so subsequent _get_client() calls
+    # have a valid path to open.
+    os.makedirs(QDRANT_PATH, exist_ok=True)
+
+
+
 def ensure_collection():
     """Create the collection if it doesn't exist yet."""
     client = _get_client()

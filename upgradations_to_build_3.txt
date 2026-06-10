@@ -126,3 +126,5 @@ You and I locked in the decision last session: flow stays as a developer-only co
 # now flow also updated for pdf detailed etc  suffixes
 
 search for ibuprofen vs asppirin rather than searching independent
+
+#####Pipeline failed while processing 'ibuprofen': Storage folder data/qdrant is already accessed by another instance of Qdrant client. If you require concurrent access, use Qdrant server instead.###

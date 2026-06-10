@@ -175,11 +175,11 @@ def _index_node(state: DrugState) -> dict:
             f"Evidence for {state['drug']!r} could not be processed into "
             f"searchable chunks.")
     vectors = embed_texts([c.text for c in chunks])
-    vectorstore.reset()  # per-run cleanup: each main.py invocation starts
-                         # with a fresh collection. Keeps local Qdrant fast
-                         # (warning kicks in past 20K points) and prevents
-                         # stale chunks from previous drug runs polluting
-                         # retrieval. Cache layer is separate and unaffected.
+    # NOTE: collection-wide reset happens ONCE at process start (in main.py
+    # via vectorstore.clear_storage()), not per-pipeline. Per-pipeline reset
+    # was wrong for the compare flow because it wiped drug-1's chunks before
+    # drug-2's pipeline could be retrieved. Multi-drug runs co-index into
+    # the same collection and use the drug payload filter to separate.
     vectorstore.index_chunks(chunks, vectors)
     return {}
 

@@ -1,0 +1,11 @@
+What I'd prioritize next session
+Honest ranking based on (a) what blocks credibility most, (b) what enables measurement of everything else:
+
+Fix the new Qdrant concurrent error (15 min) — your compare workflow is broken right now
+E1 Evaluation harness (half-day) — without this every "did I improve anything" is guesswork
+A1 Sibling-drug precision (half-day) — your worst-case error scenario; wrong-drug citation kills trust irrecoverably
+No-evidence refusal in gateway (1 hour) — the "hi how are you" path is still dangerous
+D1 Comparator head-to-head search (half-day) — current parallel-then-join approach is fundamentally wrong; needs a single combined query
+Hallucination guard (1 hour) — post-generation verify every numeric claim appears verbatim in evidence
+
+Then EudraVigilance + Cochrane (both in your June 6 plan), then re-ranking layer, then more sources.

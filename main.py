@@ -98,6 +98,20 @@ def run_pipeline(drug: str, depth: str = "medium"):
 
 
 def _dispatch(args):
+    # PROCESS-STARTUP CLEANUP — wipe the Qdrant storage so every CLI
+    # invocation starts deterministically. Skipped only for housekeeping
+    # subcommands that don't touch the vector store (cache-clear, export).
+    # Use --keep-index to opt out (e.g. for debugging an existing index).
+    _no_clear_cmds = {"cache-clear", "export"}
+    if args and args[0] not in _no_clear_cmds and "--keep-index" not in args:
+        try:
+            from storage import vectorstore
+            vectorstore.clear_storage()
+        except Exception as _e:
+            # Don't block CLI on cleanup failure — log and continue.
+            from core.logging_setup import log as _log
+            _log.warning(f"[startup] qdrant clear skipped: {_e}")
+
     def _parse_depth(arglist):
         if "--short" in arglist:
             return "short"

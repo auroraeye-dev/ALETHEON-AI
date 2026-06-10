@@ -41,3 +41,27 @@ aspirin" got mapped to "aspirin" inside ChEMBL. Should require closer name match
 8. Fix the FDA broad-fallback titles. When FDA falls back to broad search, every returned label is titled 
 "FDA Label: <your query>". Titles should reflect the actual brand name in the label, not the user's query 
 string — current behavior is a small but real misrepresentation.
+
+
+Tier 2 — Real value, but only after Tier 1 is shipped and validated with users
+9. Re-ranking layer after retrieval. A separate small LLM call that scores each retrieved 
+chunk for direct relevance to the specific question, not just embedding similarity. This is 
+what would actually fix the "tangentially relevant papers slipping in" problem at the root.
+10. NICE / USPSTF treatment guideline source. Biggest evidence-type gap in your tool. Hard to
+build (web scraping, no clean API) but high value if your target user is clinical.
+11. Streaming generation (Server-Sent Events). Right now reports take 30-60 seconds and the 
+user stares at a blank screen. Streaming the report as it generates is table-stakes for a web 
+frontend. Required for UX, not optional.
+12. Background job queue. When the web frontend exists, you can't tie up an HTTP request for a 
+60-second report. Celery/RQ. Required for production.
+13. Author / conflict-of-interest surfacing. Pull declared COIs from papers. Fits the brand, 
+real differentiator.
+14. Multi-document Q&A on the evidence base. After generating the report, let users ask follow-up
+ questions ("what did Mayo find about elderly patients?"). Significant UX improvement.
+15. Confidence calibration loop. Track when your High/Medium/Low tags match expert judgment, 
+tune. Requires you to have users first, so this comes after #10ish.
+16. Source freshness indicators. Surface the date of every source. Easy.
+17. Editable reports / regenerate-just-this-section. Power-user UX, real value for analysts.
+
+
+
