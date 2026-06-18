@@ -316,7 +316,7 @@ def _build_refusal_report(drug1: str, drug2: str,
              f"({n_h2h_screened}/{n_h2h_retrieved} h2h papers passed screening; "
              f"descriptive sections only) …")
     resp = client.chat.completions.create(
-        model=config.LLM_MODEL,
+        model=config.SYNTHESIS_MODEL,
         messages=[
             {"role": "system", "content": _REFUSAL_SYSTEM},
             {"role": "user", "content": _REFUSAL_TEMPLATE.format(
@@ -487,7 +487,7 @@ def generate_comparison(drug1: str, sections1: dict, drug2: str, sections2: dict
     # FULL ABSTRACT fetched directly from the source API, using a comparative-
     # specific prompt that explicitly structures both arms' outcomes.
     # Enriched findings override the chunk-extracted ones for h2h candidates only.
-    from h2h_reextract import reextract_h2h_candidates
+    from report.h2h_reextract import reextract_h2h_candidates
     if head_to_head_evs:
         enriched = reextract_h2h_candidates(head_to_head_evs, drug1, drug2)
         if enriched:
@@ -568,7 +568,7 @@ def generate_comparison(drug1: str, sections1: dict, drug2: str, sections2: dict
     )
 
     resp = client.chat.completions.create(
-        model=config.LLM_MODEL,
+        model=config.SYNTHESIS_MODEL,
         messages=[
             {"role": "system", "content": COMPARE_SYSTEM},
             {"role": "user", "content": user_prompt},

@@ -1,0 +1,399 @@
+10:04:43  INFO     [qdrant] storage cleared (fresh process)
+10:04:46  INFO     === ASK -> FLOW: semaglutide (depth=detailed) ===
+10:04:46  INFO     === LANGGRAPH PIPELINE: 'semaglutide' (depth=detailed) ===
+10:04:46  INFO     [faers] fetching adverse-event reports for 'semaglutide' ...
+10:04:46  INFO     [dailymed] searching prescription labels for 'semaglutide' ...
+10:04:46  INFO     [pharmgkb] looking up 'semaglutide' ...
+10:04:46  INFO     [semanticscholar] searching for 'semaglutide' (limit=50) ...
+10:04:46  INFO     [pubchem] looking up 'semaglutide' ...
+10:04:46  INFO     [clinicaltrials] searching for 'semaglutide' ...
+10:04:46  INFO     [fda] searching labels for 'semaglutide' ...
+10:04:46  INFO     [europepmc] searching for 'semaglutide' (citation + recency, pageSize=100) ...
+10:04:46  INFO     [chembl] looking up 'semaglutide' ...
+10:04:48  WARNING  [semanticscholar] rate-limited (429), backing off 2s and retrying
+10:04:48  INFO     [clinicaltrials] filtered out 26 non-completed + 0 no-results trials (would have produced ✗ failed extractions)
+10:04:48  INFO     [clinicaltrials] returned 24 trials for 'semaglutide'
+10:04:48  INFO     [faers] returned top 25 reactions for 'semaglutide' (96814 reports across them)
+10:04:49  WARNING  [pharmgkb] clinical annotations failed: 404 Client Error:  for url: https://api.pharmgkb.org/v1/data/clinicalAnnotation?relatedChemicals.accessionId=PA166305021&view=max
+10:04:49  INFO     [pharmgkb] no pharmacogenomic annotations for 'semaglutide' (may simply have no known PGx variants)
+10:04:49  INFO     [fda] returned 5 labels for 'semaglutide'
+10:04:51  WARNING  [semanticscholar] rate-limited (429), backing off 4s and retrying
+10:04:51  INFO     [pubchem] returned chemistry for 'semaglutide' (CID 56843331)
+10:04:51  INFO     [chembl] returned CHEMBL2108724 with 1 mechanism(s) for 'semaglutide'
+10:04:51  INFO     [europepmc:cited] attempt 1: hitCount=13008, results_in_page=100
+10:04:54  INFO     [europepmc:recent] attempt 1: hitCount=13008, results_in_page=50
+10:04:54  INFO     [europepmc] returned 150 results for 'semaglutide' (0 preprints, 150 peer-reviewed)
+10:04:55  WARNING  [semanticscholar] rate-limited (429), backing off 6s and retrying
+10:04:58  INFO     [dailymed] returned 199 labeled sections from 3 prescription label(s) for 'semaglutide'
+10:05:02  WARNING  [semanticscholar] no response after retries for 'semaglutide'
+10:05:02  WARNING  [graph:combine] DEGRADED MODE: 7/9 sources responded with data. ok=[clinicaltrials, faers, fda, pubchem, chembl, europepmc, dailymed] empty=[pharmgkb, semanticscholar] errored=[]
+10:05:02  INFO     [graph:combine] precision filter dropped 195 off-drug
+10:05:02  INFO     [graph:combine] 186 unique evidence (peer_reviewed: 77, real_world: 1, regulatory: 108)
+10:05:02  INFO     [graph:index] 186 evidence -> 992 chunks
+10:05:02  INFO     [embed] embedding 100 chunks (100/992) …
+10:05:05  INFO     [embed] embedding 100 chunks (200/992) …
+10:05:07  INFO     [embed] embedding 100 chunks (300/992) …
+10:05:09  INFO     [embed] embedding 100 chunks (400/992) …
+10:05:11  INFO     [embed] embedding 100 chunks (500/992) …
+10:05:13  INFO     [embed] embedding 100 chunks (600/992) …
+10:05:14  INFO     [embed] embedding 100 chunks (700/992) …
+10:05:17  INFO     [embed] embedding 100 chunks (800/992) …
+10:05:18  INFO     [embed] embedding 100 chunks (900/992) …
+10:05:19  INFO     [embed] embedding 92 chunks (992/992) …
+10:05:21  INFO     [qdrant] created collection 'aletheon_evidence'
+/Users/SatvikMishra/Desktop/aletheon_cl_code/storage/vectorstore.py:114: UserWarning: Payload indexes have no effect in the local Qdrant. Please use server Qdrant if you need payload indexes.
+  client.create_payload_index(
+10:05:21  INFO     [qdrant] payload indexes created on 'drug' and 'section'
+10:05:22  INFO     [qdrant] indexed 992 chunks
+10:05:22  INFO     [retrieve] depth=detailed
+10:05:22  INFO     [embed] embedding 1 chunks (1/1) …
+10:05:23  INFO     [retrieve:overview] 14 chunks
+10:05:23  INFO     [embed] embedding 1 chunks (1/1) …
+10:05:23  INFO     [retrieve:safety] 16 chunks
+10:05:23  INFO     [embed] embedding 1 chunks (1/1) …
+10:05:23  INFO     [retrieve:efficacy] 15 chunks (peer-reviewed + regulatory)
+10:05:23  INFO     [embed] embedding 1 chunks (1/1) …
+10:05:24  INFO     [embed] embedding 1 chunks (1/1) …
+10:05:24  INFO     [retrieve:contradiction] 10 chunks (both sides)
+10:05:24  INFO     [embed] embedding 1 chunks (1/1) …
+10:05:25  INFO     [retrieve:preprint] 0 preprint chunks
+10:05:25  INFO     [embed] embedding 1 chunks (1/1) …
+10:05:26  INFO     [retrieve:dosing] 6 chunks (6 section-tagged)
+10:05:26  INFO     [embed] embedding 1 chunks (1/1) …
+10:05:26  INFO     [retrieve:interactions] 6 chunks (6 section-tagged)
+10:05:26  INFO     [embed] embedding 1 chunks (1/1) …
+10:05:27  INFO     [retrieve:mechanism] 5 chunks (5 section-tagged, dropped 2 stubs)
+10:05:27  INFO     [embed] embedding 1 chunks (1/1) …
+10:05:27  INFO     [retrieve:populations] 6 chunks (6 section-tagged)
+10:05:27  INFO     [embed] embedding 1 chunks (1/1) …
+10:05:28  INFO     [retrieve:blackbox] 8 chunks (8 section-tagged)
+10:05:28  INFO     [embed] embedding 1 chunks (1/1) …
+10:05:28  INFO     [retrieve:cv_risk] 8 chunks (8 section-tagged)
+10:05:28  INFO     [embed] embedding 1 chunks (1/1) …
+10:05:29  INFO     [retrieve:pregnancy] 8 chunks (8 section-tagged)
+10:05:29  INFO     [embed] embedding 1 chunks (1/1) …
+10:05:29  INFO     [retrieve:pk_pd] 8 chunks (8 section-tagged)
+10:05:29  INFO     [extract] extracting findings from 30 unique paper(s) (parallel=8) …
+10:05:29  INFO     [extract] 0 cached, 30 need LLM extraction
+10:05:31  INFO     [extract] rescued LLM-declared-failed paper NCT05813249: has content (conclusion=False, outcomes=False, safety=False) — reclassifying as 'partial'
+10:05:32  INFO     [extract] rescued LLM-declared-failed paper 33667417: has content (conclusion=False, outcomes=False, safety=False) — reclassifying as 'partial'
+10:05:34  INFO     [extract] rescued LLM-declared-failed paper NCT02557620: has content (conclusion=False, outcomes=False, safety=False) — reclassifying as 'partial'
+10:05:35  INFO     [extract] rescued LLM-declared-failed paper NCT02305381: has content (conclusion=False, outcomes=False, safety=False) — reclassifying as 'partial'
+10:05:36  INFO     [extract] rescued LLM-declared-failed paper NCT03574597: has content (conclusion=False, outcomes=False, safety=False) — reclassifying as 'partial'
+10:05:36  INFO     [extract] rescued LLM-declared-failed paper faers-semaglutide: has content (conclusion=False, outcomes=False, safety=False) — reclassifying as 'partial'
+10:05:40  INFO     [extract] rescued LLM-declared-failed paper NCT03596450: has content (conclusion=False, outcomes=False, safety=False) — reclassifying as 'partial'
+10:05:47  INFO     [extract] done: 20 complete, 8 partial, 2 failed
+10:05:47  INFO     [report] generating for 'semaglutide' (depth=detailed) from 83 unique chunks (30 extracted findings) across 12 sections …
+10:07:11  INFO     [report] saved -> data/reports/semaglutide/report_20260611_100711.md
+10:07:11  INFO     [evaluate] report is solid -> no corrective pass needed
+
+======================================================================
+# Aletheon Report: semaglutide
+
+_Generated 2026-06-11 10:07 · 83 evidence chunks from 47 sources (section-targeted, detailed) · **degraded retrieval** (7/9 sources responded; unavailable: pharmgkb, semanticscholar) · grounded in retrieved sources only_
+
+## Summary
+Semaglutide is indicated for the treatment of adults with overweight or obesity, and type 2 diabetes. In a randomized controlled trial (n=304), semaglutide 2.4 mg once weekly resulted in a percentage change in body weight of -15.2% compared to -2.6% with placebo, yielding an estimated treatment difference of -12.6 percentage points (95% CI, -15.3 to -9.8; P < 0.0001) [E10]. The most important safety signal is gastrointestinal adverse events, reported in 82.2% of patients treated with semaglutide compared to 53.9% with placebo [E10]. Evidence strength is derived from 19 peer-reviewed studies and 63 regulatory sources.
+
+## Methodology — PRISMA 2020 Flow Diagram
+
+_This diagram follows the PRISMA 2020 v2 reporting standard for new
+systematic reviews including searches of databases, registers, and other
+sources. It shows how evidence flowed from initial source retrieval through
+screening, eligibility assessment, and final inclusion in the synthesized
+report. Numbers in parentheses indicate paper / record counts at each
+stage._
+
+```
+PRISMA 2020 v2 Flow Diagram
+==============================================================================
+┌──────────────────────────────┐  ┌──────────────────────────────┐  ┌──────────────────────────────┐
+│ Identification from          │  │ Identification from          │  │ Identification from other    │
+│ databases                    │  │ registers                    │  │ methods                      │
+│                              │  │                              │  │                              │
+│ Records identified (n = 152) │  │ Records identified (n = 24)  │  │ Records identified (n = 205) │
+│ · europepmc: 150             │  │ · clinicaltrials: 24         │  │ · dailymed: 199              │
+│ · pubchem: 1                 │  └──────────────────────────────┘  │ · fda: 5                     │
+│ · chembl: 1                  │                                    │ · faers: 1                   │
+│ · pharmgkb: 0                │                                    └──────────────────────────────┘
+│ · semanticscholar: 0         │                                    
+└──────────────────────────────┘                                    
+                │                                 │                                 │
+                │                                 │                                 │
+                ▼                                 ▼                                 ▼
+┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ SCREENING                                                                                        │
+│                                                                                                  │
+│ Records screened (n = 186)                                                                       │
+│ Duplicates removed (n = 0)                                                                       │
+│ Off-drug records removed (n = 195)                                                               │
+│ Records excluded at screen (n = 0)                                                               │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+                                                  │
+                                                  │
+                                                 ▼
+┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ ELIGIBILITY                                                                                      │
+│                                                                                                  │
+│ Reports assessed for eligibility (n = 30)                                                        │
+│                                                                                                  │
+│ Reports excluded with reasons:                                                                   │
+│ · Failed LLM extraction (no parseable findings) (n = 2)                                          │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+                                                  │
+                                                  │
+                                                 ▼
+┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ INCLUDED IN SYNTHESIS                                                                            │
+│                                                                                                  │
+│ Studies included in review (n = 28)                                                              │
+│ Reports of included studies (n = 28)                                                             │
+│ Unique evidence chunks cited (n = 83)                                                            │
+│ Report sections with evidence (n = 12)                                                           │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Key Findings
+
+_Findings used in this section:_
+
+| Tag | Source | Study type | Key finding |
+|-----|--------|------------|-------------|
+| E2 | DailyMed: CLINICAL PHARMACOLOGY | other | Semaglutide maximum concentration was reached approximately 1-hour after oral administration of semaglutide tablets. |
+| E3 | DailyMed: Mechanism of Action | other | Histological improvements in steatosis, inflammation, and fibrosis in liver compared to baseline. |
+| E4 | DailyMed: CLINICAL PHARMACOLOGY | label/monograph | QTc intervals: did not prolong QTc intervals at subcutaneous doses up to 1.5 mg at steady state |
+| E6 | DailyMed: CLINICAL PHARMACOLOGY | label/monograph | Blood glucose reduction: Semaglutide reduces fasting and postprandial glucose concentrations. |
+| E10 | Two-year effects of semaglutide in adults with… | RCT | percentage change in body weight: -15.2% in the semaglutide group versus -2.6% with placebo, for an estimated treatment difference of -12.6 %-points (95% confidence interval, -15.3 to -9.8; P < 0.0001) |
+| E12 | DailyMed: ADVERSE REACTIONS | observational | cholelithiasis: 1.1% of patients treated with semaglutide 14 mg tablets and 0.9% of placebo-treated patients |
+| E13 | DailyMed: Severe Gastrointestinal Adverse… | other | severe gastrointestinal adverse reactions: 0.6% (7 mg), 2% (14 mg) vs 0.3% (placebo) |
+| E14 | FDA Label: OZEMPIC | label/monograph | Discontinuation due to adverse events: 15.5% of semaglutide tablets-treated patients and 11.6% of placebo-treated patients |
+| E21 | DailyMed: Clinical Trials Experience | other | Nausea: 20% (semaglutide 14 mg), 11% (semaglutide 7 mg), 6% (placebo) |
+| E22 | DailyMed: WARNINGS AND PRECAUTIONS | label/monograph | Severe gastrointestinal adverse reactions: 0.6% (7 mg), 2% (14 mg) vs 0.3% (placebo) |
+| E24 | Semaglutide and Cardiovascular Outcomes in… | RCT | primary outcome: 6.6% in semaglutide group vs 8.9% in placebo group (hazard ratio, 0.74; 95% CI 0.58 to 0.95; P<0.001 for noninferiority) |
+| E27 | Oral semaglutide versus subcutaneous liraglutide… | RCT | HbA<sub>1c</sub> change: ETD -1·1%, -1·2 to -0·9; p<0·0001 |
+| E29 | Effect of Subcutaneous Semaglutide vs Placebo as… | RCT | mean body weight change: -16.0% for semaglutide vs -5.7% for placebo (difference, -10.3 percentage points [95% CI, -12.0 to -8.6]; P < .001) |
+| E30 | Effect of Weekly Subcutaneous Semaglutide vs… | RCT | mean weight change: -15.8% with semaglutide vs -6.4% with liraglutide (difference, -9.4 percentage points [95% CI, -12.0 to -6.8]; P < 0.001) |
+| E33 | DailyMed: CLINICAL STUDIES | RCT | mean change in body weight: -3.7 kg (semaglutide tablets 14 mg arm) |
+| E34 | DailyMed: Cardiovascular Outcomes Trial of… | RCT | MACE occurrence: HR 0.86 (95% CI: 0.77, 0.96) |
+| E39 | Effects of once-weekly semaglutide on appetite… | RCT | mean body weight reduction: 5.0 kg |
+| E40 | Efficacy and safety of once-weekly semaglutide… | RCT | HbA1c improvement: significantly improved compared with placebo |
+| E42 | Efficacy and Safety of Once-Weekly Semaglutide… | RCT | HbA1c <7.0%: 67% vs 40% |
+| E44 | FDA Label: WEGOVY | label/monograph | levothyroxine exposure: increased 33% (90% CI: 1.25-1.42) |
+| E49 | DailyMed: DRUG INTERACTIONS | label/monograph | Levothyroxine exposure increased: 33% (90% CI: 1.25 to 1.42) |
+
+- In a trial of adults with obesity or overweight and at least one weight-related comorbidity (n=304), semaglutide 2.4 mg once weekly led to a weight loss of -15.2% compared to -2.6% for placebo, with a treatment difference of -12.6 percentage points (95% CI, -15.3 to -9.8; P < 0.0001) [E10] **(Confidence: High — supported by peer-reviewed RCT)**.
+- Semaglutide significantly improved HbA1c levels in patients with type 2 diabetes, achieving HbA1c <7.0% in 67% of subjects compared to 40% for exenatide ER [E42] **(Confidence: High — supported by peer-reviewed RCT)**.
+- In patients with type 2 diabetes at high cardiovascular risk, semaglutide reduced the occurrence of major adverse cardiovascular events (MACE) with a hazard ratio of 0.86 (95% CI: 0.77–0.96) [E34] **(Confidence: High — supported by regulatory evidence)**.
+- Gastrointestinal adverse events were reported more frequently with semaglutide (82.2%) than with placebo (53.9%) [E10] **(Confidence: High — supported by peer-reviewed RCT)**.
+- Discontinuation due to adverse events occurred in 15.5% of semaglutide-treated patients compared to 11.6% in the placebo group [E21] **(Confidence: High — supported by regulatory evidence)**.
+
+## Safety / Warnings
+
+_Findings used in this section:_
+
+| Tag | Source | Safety signal |
+|-----|--------|---------------|
+| E10 | Two-year effects of semaglutide in adults with… | Gastrointestinal adverse events, mostly mild-to-moderate, were reported more often with semaglutide than with placebo (82.2% versus 53.9%). |
+| E12 | DailyMed: ADVERSE REACTIONS | Adverse reactions reported during post-approval use include acute pancreatitis, anaphylaxis, and acute kidney injury. |
+| E13 | DailyMed: Severe Gastrointestinal Adverse… | Severe gastrointestinal adverse reactions have also been reported postmarketing with GLP-1 receptor agonists. |
+| E14 | FDA Label: OZEMPIC | Gastrointestinal adverse reactions occurred more frequently among patients who received semaglutide tablets than placebo. |
+| E21 | DailyMed: Clinical Trials Experience | Safety data collection was limited to serious adverse events (including death), adverse events leading to discontinuation, and adverse events of special interest. |
+| E22 | DailyMed: WARNINGS AND PRECAUTIONS | Serious hypersensitivity reactions (e.g., anaphylaxis, angioedema) have been reported in patients treated with semaglutide tablets. |
+| E27 | Oral semaglutide versus subcutaneous liraglutide… | Safety was assessed in all participants who received at least one dose of study drug. |
+| E29 | Effect of Subcutaneous Semaglutide vs Placebo as… | Gastrointestinal adverse events were more frequent with semaglutide (82.8%) vs placebo (63.2%). |
+| E30 | Effect of Weekly Subcutaneous Semaglutide vs… | Proportions of participants discontinuing treatment for any reason were 13.5% with semaglutide and 27.6% with liraglutide. |
+| E40 | Efficacy and safety of once-weekly semaglutide… | No deaths were reported in any of the study groups and most reported adverse events were of mild or moderate severity. |
+| E42 | Efficacy and Safety of Once-Weekly Semaglutide… | Both treatments had similar safety profiles, but gastrointestinal adverse events were more common in semaglutide-treated subjects than in exenatide ER-treated subjects. |
+| E44 | FDA Label: WEGOVY | WEGOVY lowers blood glucose and can cause hypoglycemia, with increased risk when used with insulin or insulin secretagogues. |
+| E49 | DailyMed: DRUG INTERACTIONS | Patients receiving RYBELSUS or OZEMPIC tablets in combination with an insulin secretagogue or insulin may have an increased risk of hypoglycemia, including severe hypoglycemia. |
+
+- Common adverse effects include nausea (20% with semaglutide 0.5 mg, 24% with 1.0 mg) and gastrointestinal issues such as diarrhea (13% with 0.5 mg, 11% with 1.0 mg) [E40].
+- Severe gastrointestinal adverse reactions occurred in 2% of patients treated with semaglutide 14 mg compared to 0.3% in placebo [E22].
+- Serious hypersensitivity reactions (e.g., anaphylaxis, angioedema) have been reported; semaglutide is contraindicated in patients with a prior serious hypersensitivity reaction to the drug [E22].
+- Acute gallbladder disease, including cholelithiasis and cholecystitis, has been reported in clinical trials [E22].
+- There is an increased risk of hypoglycemia when semaglutide is used with insulin or insulin secretagogues [E48].
+
+## Black Box Warnings
+No FDA boxed warning is present in this drug's prescribing information.
+
+## Cardiovascular Risk Profile
+- In patients with type 2 diabetes at high cardiovascular risk, semaglutide reduced the occurrence of MACE with a hazard ratio of 0.86 (95% CI: 0.77–0.96) [E34].
+- Nonfatal myocardial infarction occurred in 2.9% of patients receiving semaglutide versus 3.9% in the placebo group (hazard ratio, 0.74; 95% CI, 0.51 to 1.08; P=0.12) [E24].
+- Nonfatal stroke rates were 1.6% in the semaglutide group compared to 2.7% in the placebo group (hazard ratio, 0.61; 95% CI, 0.38 to 0.99; P=0.04) [E24].
+
+## Pharmacokinetics & Pharmacodynamics
+- Semaglutide has an absolute bioavailability of 89% following subcutaneous administration [E80].
+- The elimination half-life of semaglutide is approximately one week, with a mean clearance of about 0.05 L/h [E80].
+- Semaglutide is extensively bound to plasma albumin (>99%), which results in decreased renal clearance and protection from degradation [E80].
+- Maximum concentration of semaglutide is reached 1 to 3 days post-dose [E80].
+
+## Dosing & Administration
+- Semaglutide is administered as a subcutaneous injection at a dose of 2.4 mg once weekly for weight management in adults with obesity or overweight [E10].
+- For type 2 diabetes, semaglutide is available in doses of 0.5 mg or 1.0 mg once weekly [E40].
+
+## Drug Interactions
+- Semaglutide delays gastric emptying, which may impact the absorption of concomitantly administered oral medications [E48].
+- Levothyroxine exposure was increased by 33% (90% CI: 1.25–1.42) when administered with semaglutide [E48].
+- Caution is advised when semaglutide is used with insulin or insulin secretagogues due to an increased risk of hypoglycemia [E48].
+
+## Mechanism of Action
+Semaglutide is a GLP-1 analogue with 94% sequence homology to human GLP-1. It acts as a GLP-1 receptor agonist, stimulating insulin secretion and reducing glucagon secretion in a glucose-dependent manner. This mechanism helps lower blood glucose levels and promotes weight loss by regulating appetite and caloric intake [E2][E3].
+
+## Pregnancy, Lactation & Reproductive Safety
+- Semaglutide should be used during pregnancy only if the potential benefit justifies the potential risk to the fetus. Animal studies indicate potential risks, including embryofetal mortality and structural abnormalities [E56].
+- Breastfeeding is not recommended during treatment with semaglutide due to the unknown potential for serious adverse reactions in the breastfed infant [E70].
+
+## Use in Specific Populations
+- No overall differences in safety or effectiveness have been observed between patients aged 65 years and older and younger adult patients [E55].
+- The recommended dosage of semaglutide is the same for patients with renal or hepatic impairment as for those with normal function [E55].
+
+## Contradictions & Disagreements
+No direct contradictions found in current sources.
+
+## Preprint / Emerging Evidence (not yet peer-reviewed)
+No preprint evidence in current sources.
+
+## Clinical Bottom Line
+Use semaglutide for weight management in adults with obesity or overweight at a dose of 2.4 mg once weekly. The primary risk to monitor is gastrointestinal adverse events, reported in 82.2% of patients. Avoid or use cautiously in patients with a history of severe gastrointestinal disorders or hypersensitivity reactions.
+
+## Evidence Table (Audit Appendix)
+_Per-paper structured extraction — for verification. The synthesis above is drawn from these rows; this section lets you audit each claim back to its source._
+
+### Evidence Table
+_Per-paper structured extraction. Each row is the LLM's extraction of one source, with numbers quoted verbatim. Quality flags: ✓ complete · ⚠ partial._
+
+| Tag | Quality | Source | Study type | n | Key finding | Conclusion |
+|-----|---------|--------|------------|---|-------------|------------|
+| E1 | ⚠ | Semaglutide 2·4 mg once a week in a… | RCT |  | — |  |
+| E2 | ✓ | DailyMed: CLINICAL PHARMACOLOGY | other |  | Semaglutide maximum concentration was reached approximately 1-hour after oral administration of semaglutide tablets. | There were no clinically significant differences observed in the mean steady state AUC 0-24h,SS and C max,SS between the 3 mg, 7 mg and 14 mg doses of RYBELSUS and the 1.5 mg, 4 mg and 9 mg doses of… |
+| E3 | ⚠ | DailyMed: Mechanism of Action | other |  | Histological improvements in steatosis, inflammation, and fibrosis in liver compared to baseline. | The exact mechanism of semaglutide in CV risk reduction in adults has not been established. |
+| E4 | ✓ | DailyMed: CLINICAL PHARMACOLOGY | label/monograph |  | QTc intervals: did not prolong QTc intervals at subcutaneous doses up to 1.5 mg at steady state | The clinical relevance of these changes is yet to be confirmed. |
+| E6 | ✓ | DailyMed: CLINICAL PHARMACOLOGY | label/monograph |  | Blood glucose reduction: Semaglutide reduces fasting and postprandial glucose concentrations. | Semaglutide reduces blood glucose through a mechanism where it stimulates insulin secretion and lowers glucagon secretion, both in a glucose-dependent manner. |
+| E7 | ⚠ | Semaglutide in Nonalcoholic Fatty L… | trial registration |  | — |  |
+| E9 | ⚠ | Comparing Semaglutide Administered … | trial registration |  | — |  |
+| E10 | ✓ | Two-year effects of semaglutide in … | RCT | 304 participants | percentage change in body weight: -15.2% in the semaglutide group versus -2.6% with placebo, for an estimated treatment difference of -12.6 %-points (95% confidence interval, -15.3 to -9.8; P <… | The STEP 5 trial assessed the efficacy and safety of once-weekly subcutaneous semaglutide 2.4 mg versus placebo for long-term treatment of adults with obesity, or overweight with at least one… |
+| E11 | ⚠ | Efficacy and Safety of Semaglutide … | RCT |  | — |  |
+| E12 | ✓ | DailyMed: ADVERSE REACTIONS | observational |  | cholelithiasis: 1.1% of patients treated with semaglutide 14 mg tablets and 0.9% of placebo-treated patients | Because these reactions are reported voluntarily from a population of uncertain size, it is not always possible to reliably estimate their frequency or establish a causal relationship to drug… |
+| E13 | ✓ | DailyMed: Severe Gastrointestinal A… | other |  | severe gastrointestinal adverse reactions: 0.6% (7 mg), 2% (14 mg) vs 0.3% (placebo) | RYBELSUS and OZEMPIC tablets are not recommended in patients with severe gastroparesis. |
+| E14 | ✓ | FDA Label: OZEMPIC | label/monograph |  | Discontinuation due to adverse events: 15.5% of semaglutide tablets-treated patients and 11.6% of placebo-treated patients | Additional information from this trial is included in subsequent sections below, when relevant. |
+| E16 | ⚠ | Semaglutide Effects on Heart Diseas… | trial registration |  | — |  |
+| E17 | ⚠ | FAERS adverse-event summary: semagl… | other |  | — |  |
+| E21 | ✓ | DailyMed: Clinical Trials Experienc… | other | 4,825 patients | Nausea: 20% (semaglutide 14 mg), 11% (semaglutide 7 mg), 6% (placebo) | Common Adverse Reactions Table 2 shows common adverse reactions, excluding hypoglycemia, associated with the use of semaglutide tablets in adult patients with type 2 diabetes mellitus in the pool of… |
+| E22 | ✓ | DailyMed: WARNINGS AND PRECAUTIONS | label/monograph |  | Severe gastrointestinal adverse reactions: 0.6% (7 mg), 2% (14 mg) vs 0.3% (placebo) | RYBELSUS and OZEMPIC tablets are contraindicated in patients with a prior serious hypersensitivity reaction to semaglutide or to any of the excipients in RYBELSUS or OZEMPIC tablets. |
+| E24 | ✓ | Semaglutide and Cardiovascular Outc… | RCT | 3297 patients | primary outcome: 6.6% in semaglutide group vs 8.9% in placebo group (hazard ratio, 0.74; 95% CI 0.58 to 0.95; P<0.001 for noninferiority) | semaglutide would be noninferior to placebo for the primary outcome. |
+| E27 | ✓ | Oral semaglutide versus subcutaneou… | RCT | 711 | HbA<sub>1c</sub> change: ETD -1·1%, -1·2 to -0·9; p<0·0001 | Oral semaglutide was non-inferior to subcutaneous liraglutide in decreasing HbA<sub>1c</sub> and superior to placebo. |
+| E29 | ✓ | Effect of Subcutaneous Semaglutide … | RCT | 611 randomized… | mean body weight change: -16.0% for semaglutide vs -5.7% for placebo (difference, -10.3 percentage points [95% CI, -12.0 to -8.6]; P < .001) | Among adults with overweight or obesity, once-weekly subcutaneous semaglutide compared with placebo, used as an adjunct to intensive behavioral therapy and initial low-calorie diet, resulted in… |
+| E30 | ✓ | Effect of Weekly Subcutaneous Semag… | RCT | 338 randomized… | mean weight change: -15.8% with semaglutide vs -6.4% with liraglutide (difference, -9.4 percentage points [95% CI, -12.0 to -6.8]; P < 0.001) | Semaglutide was associated with significantly greater weight loss compared with liraglutide in adults with overweight or obesity without diabetes. |
+| E32 | ⚠ | Long Term Comparative Effectiveness… | RCT |  | — |  |
+| E33 | ✓ | DailyMed: CLINICAL STUDIES | RCT | 9,650 patients | mean change in body weight: -3.7 kg (semaglutide tablets 14 mg arm) | 14.4 Cardiovascular Outcomes Trial of Semaglutide Tablets in Adult Patients with Type 2 Diabetes Mellitus and High Risk of Having a Cardiovascular Event Trial 7 (NCT03914326) was a randomized… |
+| E34 | ✓ | DailyMed: Cardiovascular Outcomes T… | RCT | 98.4% patients… | MACE occurrence: HR 0.86 (95% CI: 0.77, 0.96) | Semaglutide tablets significantly reduced the occurrence of MACE. |
+| E39 | ✓ | Effects of once-weekly semaglutide … | RCT |  | mean body weight reduction: 5.0 kg | After 12 weeks of treatment, ad libitum energy intake was substantially lower with semaglutide vs placebo with a corresponding loss of body weight observed with semaglutide. |
+| E40 | ✓ | Efficacy and safety of once-weekly … | RCT |  | HbA1c improvement: significantly improved compared with placebo | Semaglutide significantly improved HbA1c and bodyweight in patients with type 2 diabetes compared with placebo, and showed a similar safety profile to currently available GLP-1 receptor agonists… |
+| E42 | ✓ | Efficacy and Safety of Once-Weekly … | RCT |  | HbA1c <7.0%: 67% vs 40% | Semaglutide 1.0 mg was superior to exenatide ER 2.0 mg in improving glycemic control and reducing body weight after 56 weeks of treatment; the drugs had comparable safety profiles. |
+| E44 | ✓ | FDA Label: WEGOVY | label/monograph |  | levothyroxine exposure: increased 33% (90% CI: 1.25-1.42) | Consider increased clinical or laboratory monitoring when used concomitantly with other oral medications that have a narrow therapeutic index or that require clinical monitoring. |
+| E49 | ✓ | DailyMed: DRUG INTERACTIONS | label/monograph |  | Levothyroxine exposure increased: 33% (90% CI: 1.25 to 1.42) | When using RYBELSUS or OZEMPIC tablets concomitantly with other oral drugs that have a narrow therapeutic index or that require clinical monitoring, consider increased clinical or laboratory… |
+
+_2 additional paper(s) retrieved had no extractable findings (e.g. trial registrations with no reported results, or chemistry/preprint records). They remain available in Sources for traceability._
+
+
+## Sources
+
+
+- **[E1]** (peer_reviewed) Semaglutide 2·4 mg once a week in adults with overweight or obesity, and type 2 diabetes (STEP 2): a randomised, double-blind, double-dummy, placebo-controlled, phase 3 trial. — europepmc:33667417  
+  https://europepmc.org/article/MED/33667417
+- **[E2][E78][E81][E83]** (regulatory) DailyMed: CLINICAL PHARMACOLOGY — dailymed:27f15fac-7d98-4114-a2ec-92494a91da98#clinical_pharmacology  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=27f15fac-7d98-4114-a2ec-92494a91da98
+- **[E3]** (regulatory) DailyMed: Mechanism of Action — dailymed:ee06186f-2aa3-4990-a760-757579d8f77b#mechanism_of_action  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=ee06186f-2aa3-4990-a760-757579d8f77b
+- **[E4][E38][E79][E82]** (regulatory) DailyMed: CLINICAL PHARMACOLOGY — dailymed:ee06186f-2aa3-4990-a760-757579d8f77b#clinical_pharmacology  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=ee06186f-2aa3-4990-a760-757579d8f77b
+- **[E5]** (peer_reviewed) Semaglutide and Cardiovascular Outcomes in Obesity without Diabetes. — europepmc:37952131  
+  https://europepmc.org/article/MED/37952131
+- **[E6]** (regulatory) DailyMed: CLINICAL PHARMACOLOGY — dailymed:adec4fd2-6858-4c99-91d4-531f5f2a2d79#clinical_pharmacology  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=adec4fd2-6858-4c99-91d4-531f5f2a2d79
+- **[E7]** (peer_reviewed) Semaglutide in Nonalcoholic Fatty Liver Disease — clinicaltrials:NCT05813249  
+  https://clinicaltrials.gov/study/NCT05813249
+- **[E8]** (peer_reviewed) Semaglutide in Patients with Heart Failure with Preserved Ejection Fraction and Obesity. — europepmc:37622681  
+  https://europepmc.org/article/MED/37622681
+- **[E9]** (peer_reviewed) Comparing Semaglutide Administered Subcutaneously Once Daily to Semaglutide Administered Subcutaneously Once Weekly — clinicaltrials:NCT02557620  
+  https://clinicaltrials.gov/study/NCT02557620
+- **[E10][E31]** (peer_reviewed) Two-year effects of semaglutide in adults with overweight or obesity: the STEP 5 trial. — europepmc:36216945  
+  https://europepmc.org/article/MED/36216945
+- **[E11]** (peer_reviewed) Efficacy and Safety of Semaglutide Once-weekly Versus Placebo as add-on to Basal Insulin Alone or Basal Insulin in Combination With Metformin in Subjects With Type 2 Diabetes — clinicaltrials:NCT02305381  
+  https://clinicaltrials.gov/study/NCT02305381
+- **[E12][E15][E19][E26]** (regulatory) DailyMed: ADVERSE REACTIONS — dailymed:27f15fac-7d98-4114-a2ec-92494a91da98#adverse_reactions  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=27f15fac-7d98-4114-a2ec-92494a91da98
+- **[E13]** (regulatory) DailyMed: Severe Gastrointestinal Adverse Reactions — dailymed:27f15fac-7d98-4114-a2ec-92494a91da98#severe_gastrointestinal_adverse_reactions  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=27f15fac-7d98-4114-a2ec-92494a91da98
+- **[E14][E18][E20][E23][E25][E43][E46][E47][E48]** (regulatory) FDA Label: OZEMPIC — fda:27f15fac-7d98-4114-a2ec-92494a91da98  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=27f15fac-7d98-4114-a2ec-92494a91da98
+- **[E16]** (peer_reviewed) Semaglutide Effects on Heart Disease and Stroke in Patients With Overweight or Obesity — clinicaltrials:NCT03574597  
+  https://clinicaltrials.gov/study/NCT03574597
+- **[E17]** (real_world) FAERS adverse-event summary: semaglutide — faers:faers-semaglutide  
+  https://www.fda.gov/drugs/questions-and-answers-fdas-adverse-event-reporting-system-faers
+- **[E21][E36]** (regulatory) DailyMed: Clinical Trials Experience — dailymed:27f15fac-7d98-4114-a2ec-92494a91da98#clinical_trials_experience  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=27f15fac-7d98-4114-a2ec-92494a91da98
+- **[E22][E61][E62][E63][E65][E67]** (regulatory) DailyMed: WARNINGS AND PRECAUTIONS — dailymed:27f15fac-7d98-4114-a2ec-92494a91da98#warnings_and_precautions  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=27f15fac-7d98-4114-a2ec-92494a91da98
+- **[E24][E28][E41]** (peer_reviewed) Semaglutide and Cardiovascular Outcomes in Patients with Type 2 Diabetes. — europepmc:27633186  
+  https://europepmc.org/article/MED/27633186
+- **[E27]** (peer_reviewed) Oral semaglutide versus subcutaneous liraglutide and placebo in type 2 diabetes (PIONEER 4): a randomised, double-blind, phase 3a trial. — europepmc:31186120  
+  https://europepmc.org/article/MED/31186120
+- **[E29]** (peer_reviewed) Effect of Subcutaneous Semaglutide vs Placebo as an Adjunct to Intensive Behavioral Therapy on Body Weight in Adults With Overweight or Obesity: The STEP 3 Randomized Clinical Trial. — europepmc:33625476  
+  https://europepmc.org/article/MED/33625476
+- **[E30]** (peer_reviewed) Effect of Weekly Subcutaneous Semaglutide vs Daily Liraglutide on Body Weight in Adults With Overweight or Obesity Without Diabetes: The STEP 8 Randomized Clinical Trial. — europepmc:35015037  
+  https://europepmc.org/article/MED/35015037
+- **[E32]** (peer_reviewed) Long Term Comparative Effectiveness of Once Weekly Semaglutide Versus Standard of Care in a Real World Adult US Population With Type 2 Diabetes - a Randomized Pragmatic Trial — clinicaltrials:NCT03596450  
+  https://clinicaltrials.gov/study/NCT03596450
+- **[E33][E35][E37]** (regulatory) DailyMed: CLINICAL STUDIES — dailymed:27f15fac-7d98-4114-a2ec-92494a91da98#clinical_studies  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=27f15fac-7d98-4114-a2ec-92494a91da98
+- **[E34]** (regulatory) DailyMed: Cardiovascular Outcomes Trial of Semaglutide Tablets in Adult Patients with Type 2 Diabetes Mellitus and High Risk of Having a Cardiovascular Event — dailymed:27f15fac-7d98-4114-a2ec-92494a91da98#cardiovascular_outcomes_trial_of_semaglutide_table  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=27f15fac-7d98-4114-a2ec-92494a91da98
+- **[E39]** (peer_reviewed) Effects of once-weekly semaglutide on appetite, energy intake, control of eating, food preference and body weight in subjects with obesity. — europepmc:28266779  
+  https://europepmc.org/article/MED/28266779
+- **[E40]** (peer_reviewed) Efficacy and safety of once-weekly semaglutide monotherapy versus placebo in patients with type 2 diabetes (SUSTAIN 1): a double-blind, randomised, placebo-controlled, parallel-group, multinational, multicentre phase 3a trial. — europepmc:28110911  
+  https://europepmc.org/article/MED/28110911
+- **[E42]** (peer_reviewed) Efficacy and Safety of Once-Weekly Semaglutide Versus Exenatide ER in Subjects With Type 2 Diabetes (SUSTAIN 3): A 56-Week, Open-Label, Randomized Clinical Trial. — europepmc:29246950  
+  https://europepmc.org/article/MED/29246950
+- **[E44][E45][E52]** (regulatory) FDA Label: WEGOVY — fda:ee06186f-2aa3-4990-a760-757579d8f77b  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=ee06186f-2aa3-4990-a760-757579d8f77b
+- **[E49]** (regulatory) DailyMed: DRUG INTERACTIONS — dailymed:27f15fac-7d98-4114-a2ec-92494a91da98#drug_interactions  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=27f15fac-7d98-4114-a2ec-92494a91da98
+- **[E50]** (regulatory) FDA Label: Ozempic — fda:979e4df4-0597-48ea-b51c-0f699fa6d166  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=979e4df4-0597-48ea-b51c-0f699fa6d166
+- **[E51]** (regulatory) FDA Label: OZEMPIC — fda:e6da837c-0da0-41d6-973c-5559bf764367  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=e6da837c-0da0-41d6-973c-5559bf764367
+- **[E53]** (regulatory) DailyMed: DRUG INTERACTIONS — dailymed:ee06186f-2aa3-4990-a760-757579d8f77b#drug_interactions  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=ee06186f-2aa3-4990-a760-757579d8f77b
+- **[E54]** (regulatory) DailyMed: Mechanism of Action — dailymed:27f15fac-7d98-4114-a2ec-92494a91da98#mechanism_of_action  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=27f15fac-7d98-4114-a2ec-92494a91da98
+- **[E55][E56][E57]** (regulatory) DailyMed: USE IN SPECIFIC POPULATIONS — dailymed:27f15fac-7d98-4114-a2ec-92494a91da98#use_in_specific_populations  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=27f15fac-7d98-4114-a2ec-92494a91da98
+- **[E58][E60][E74]** (regulatory) DailyMed: USE IN SPECIFIC POPULATIONS — dailymed:adec4fd2-6858-4c99-91d4-531f5f2a2d79#use_in_specific_populations  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=adec4fd2-6858-4c99-91d4-531f5f2a2d79
+- **[E59]** (regulatory) DailyMed: Geriatric Use — dailymed:27f15fac-7d98-4114-a2ec-92494a91da98#geriatric_use  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=27f15fac-7d98-4114-a2ec-92494a91da98
+- **[E64][E68][E69]** (regulatory) DailyMed: WARNINGS AND PRECAUTIONS — dailymed:ee06186f-2aa3-4990-a760-757579d8f77b#warnings_and_precautions  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=ee06186f-2aa3-4990-a760-757579d8f77b
+- **[E66]** (regulatory) DailyMed: WARNINGS AND PRECAUTIONS — dailymed:adec4fd2-6858-4c99-91d4-531f5f2a2d79#warnings_and_precautions  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=adec4fd2-6858-4c99-91d4-531f5f2a2d79
+- **[E70]** (regulatory) DailyMed: Lactation — dailymed:adec4fd2-6858-4c99-91d4-531f5f2a2d79#lactation  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=adec4fd2-6858-4c99-91d4-531f5f2a2d79
+- **[E71]** (regulatory) DailyMed: Lactation — dailymed:27f15fac-7d98-4114-a2ec-92494a91da98#lactation  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=27f15fac-7d98-4114-a2ec-92494a91da98
+- **[E72]** (regulatory) DailyMed: Pregnancy — dailymed:adec4fd2-6858-4c99-91d4-531f5f2a2d79#pregnancy  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=adec4fd2-6858-4c99-91d4-531f5f2a2d79
+- **[E73]** (regulatory) DailyMed: Pregnancy — dailymed:27f15fac-7d98-4114-a2ec-92494a91da98#pregnancy  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=27f15fac-7d98-4114-a2ec-92494a91da98
+- **[E75]** (regulatory) DailyMed: Pregnancy — dailymed:ee06186f-2aa3-4990-a760-757579d8f77b#pregnancy  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=ee06186f-2aa3-4990-a760-757579d8f77b
+- **[E76]** (regulatory) DailyMed: Pharmacokinetics — dailymed:27f15fac-7d98-4114-a2ec-92494a91da98#pharmacokinetics  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=27f15fac-7d98-4114-a2ec-92494a91da98
+- **[E77]** (regulatory) DailyMed: Pharmacokinetics — dailymed:ee06186f-2aa3-4990-a760-757579d8f77b#pharmacokinetics  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=ee06186f-2aa3-4990-a760-757579d8f77b
+- **[E80]** (regulatory) DailyMed: Pharmacokinetics — dailymed:adec4fd2-6858-4c99-91d4-531f5f2a2d79#pharmacokinetics  
+  https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=adec4fd2-6858-4c99-91d4-531f5f2a2d79
+======================================================================
+
+Saved to: data/reports/semaglutide/report_20260611_100711.md
+

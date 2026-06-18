@@ -20,7 +20,8 @@ class Config:
 
     # ---- Models ----
     EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")
-    LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")     # cheap + good for reports
+    LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")     # cheap — extraction + screening (high volume)
+    SYNTHESIS_MODEL = os.getenv("SYNTHESIS_MODEL", "gpt-4o")  # stronger — report synthesis only (~12 calls/report)    # cheap + good for reports
 
     # ---- Qdrant (local) ----
     QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")

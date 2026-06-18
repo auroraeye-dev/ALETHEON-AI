@@ -386,7 +386,7 @@ def generate_report(drug: str, sections: dict[str, list[dict]], depth: str = "me
              f"unique chunks ({len(findings)} extracted findings) "
              f"across {len([s for s in sections if sections[s]])} sections …")
     resp = client.chat.completions.create(
-        model=config.LLM_MODEL,
+        model=config.SYNTHESIS_MODEL,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": USER_TEMPLATE.format(
