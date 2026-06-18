@@ -18,3 +18,5 @@ __pycache__/
 .vscode/
 .idea/
 *.bak
+data/qdrant/
+*.sqlite
