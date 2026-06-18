@@ -30,6 +30,78 @@ def _get_client() -> OpenAI:
     return _client
 
 
+_anthropic_client = None
+
+
+def _get_anthropic_client():
+    """Lazy Anthropic client. Imported here so OpenAI-only installs still work."""
+    global _anthropic_client
+    if _anthropic_client is None:
+        if not config.ANTHROPIC_API_KEY:
+            raise RuntimeError("ANTHROPIC_API_KEY is not set in .env")
+        from anthropic import Anthropic
+        _anthropic_client = Anthropic(api_key=config.ANTHROPIC_API_KEY)
+    return _anthropic_client
+
+
+def synthesize(system_prompt: str, user_prompt: str,
+               temperature: float = 0.2) -> str:
+    """Provider-agnostic synthesis call. Routes to OpenAI or Claude based on
+    config.SYNTHESIS_PROVIDER. Returns the response text. Records token usage.
+
+    This is the SINGLE place report prose is generated — both the single-drug
+    report and the comparison report call through here, so switching providers
+    is one env var (SYNTHESIS_PROVIDER) with no code changes at the call sites.
+    """
+    provider = (config.SYNTHESIS_PROVIDER or "openai").lower()
+
+    if provider == "claude":
+        client = _get_anthropic_client()
+        resp = client.messages.create(
+            model=config.CLAUDE_SYNTHESIS_MODEL,
+            max_tokens=config.SYNTHESIS_MAX_TOKENS,
+            temperature=temperature,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        # Record usage (Anthropic uses input_tokens / output_tokens)
+        try:
+            from core.metrics import record_llm
+            u = getattr(resp, "usage", None)
+            if u is not None:
+                record_llm(getattr(u, "input_tokens", 0),
+                           getattr(u, "output_tokens", 0),
+                           config.CLAUDE_SYNTHESIS_MODEL)
+        except Exception:
+            pass
+        # Claude returns a list of content blocks; concatenate text blocks.
+        return "".join(
+            block.text for block in resp.content
+            if getattr(block, "type", None) == "text"
+        )
+
+    # default: OpenAI
+    client = _get_client()
+    resp = client.chat.completions.create(
+        model=config.SYNTHESIS_MODEL,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=temperature,
+    )
+    try:
+        from core.metrics import record_llm
+        u = getattr(resp, "usage", None)
+        if u is not None:
+            record_llm(getattr(u, "prompt_tokens", 0),
+                       getattr(u, "completion_tokens", 0),
+                       config.SYNTHESIS_MODEL)
+    except Exception:
+        pass
+    return resp.choices[0].message.content
+
+
 def _merge_and_tag(sections: dict[str, list[dict]]) -> tuple[dict, list[dict]]:
     """Dedup chunks across sections, assign each a stable [E#] tag.
     Returns (section -> list of tags, ordered unique chunks with .tag)."""
@@ -385,29 +457,16 @@ def generate_report(drug: str, sections: dict[str, list[dict]], depth: str = "me
     log.info(f"[report] generating for {drug!r} (depth={depth}) from {len(ordered)} "
              f"unique chunks ({len(findings)} extracted findings) "
              f"across {len([s for s in sections if sections[s]])} sections …")
-    resp = client.chat.completions.create(
-        model=config.SYNTHESIS_MODEL,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": USER_TEMPLATE.format(
-                drug=drug,
-                evidence=evidence_block,
-                findings=findings_block,
-                tier_tally=_tier_tally(ordered),
-                tier_authority=TIER_AUTHORITY) + "\n\n" + guidance},
-        ],
+    body = synthesize(
+        system_prompt=SYSTEM_PROMPT,
+        user_prompt=USER_TEMPLATE.format(
+            drug=drug,
+            evidence=evidence_block,
+            findings=findings_block,
+            tier_tally=_tier_tally(ordered),
+            tier_authority=TIER_AUTHORITY) + "\n\n" + guidance,
         temperature=config.LLM_TEMPERATURE,
     )
-    # cost/speed tracking (E2)
-    try:
-        from core.metrics import record_llm
-        u = getattr(resp, "usage", None)
-        if u is not None:
-            record_llm(getattr(u, "prompt_tokens", 0),
-                       getattr(u, "completion_tokens", 0), config.LLM_MODEL)
-    except Exception:
-        pass
-    body = resp.choices[0].message.content
 
     # Safeguard: the model occasionally emits BOTH preprint bullets AND the
     # "No preprint evidence" fallback line in the Preprint section, which

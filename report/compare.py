@@ -17,7 +17,7 @@ from datetime import datetime
 
 from core.config import config
 from core.logging_setup import log
-from report.generate import _get_client, _tier_tally
+from report.generate import _get_client, _tier_tally, synthesize
 
 
 def _flatten_tag(sections: dict, prefix: str) -> tuple[list[dict], str]:
@@ -315,25 +315,13 @@ def _build_refusal_report(drug1: str, drug2: str,
     log.info(f"[compare] generating REFUSAL-mode report for {drug1} vs {drug2} "
              f"({n_h2h_screened}/{n_h2h_retrieved} h2h papers passed screening; "
              f"descriptive sections only) …")
-    resp = client.chat.completions.create(
-        model=config.SYNTHESIS_MODEL,
-        messages=[
-            {"role": "system", "content": _REFUSAL_SYSTEM},
-            {"role": "user", "content": _REFUSAL_TEMPLATE.format(
-                drug1=drug1, drug2=drug2,
-                findings1=findings_block_1, findings2=findings_block_2)},
-        ],
+    descriptive_body = synthesize(
+        system_prompt=_REFUSAL_SYSTEM,
+        user_prompt=_REFUSAL_TEMPLATE.format(
+            drug1=drug1, drug2=drug2,
+            findings1=findings_block_1, findings2=findings_block_2),
         temperature=0.0,
     )
-    try:
-        from core.metrics import record_llm
-        u = getattr(resp, "usage", None)
-        if u is not None:
-            record_llm(getattr(u, "prompt_tokens", 0),
-                       getattr(u, "completion_tokens", 0), config.LLM_MODEL)
-    except Exception:
-        pass
-    descriptive_body = resp.choices[0].message.content
 
     # The hard-coded refusal block replaces what would have been Bottom Line /
     # Key Trade-offs / Efficacy / Safety / Clinical Bottom Line. Honest, dated,
@@ -567,24 +555,11 @@ def generate_comparison(drug1: str, sections1: dict, drug2: str, sections2: dict
         # COMPARE_TEMPLATE no longer references {block1}/{block2}.
     )
 
-    resp = client.chat.completions.create(
-        model=config.SYNTHESIS_MODEL,
-        messages=[
-            {"role": "system", "content": COMPARE_SYSTEM},
-            {"role": "user", "content": user_prompt},
-        ],
+    body = synthesize(
+        system_prompt=COMPARE_SYSTEM,
+        user_prompt=user_prompt,
         temperature=config.LLM_TEMPERATURE,
     )
-    # cost tracking
-    try:
-        from core.metrics import record_llm
-        u = getattr(resp, "usage", None)
-        if u is not None:
-            record_llm(getattr(u, "prompt_tokens", 0),
-                       getattr(u, "completion_tokens", 0), config.LLM_MODEL)
-    except Exception:
-        pass
-    body = resp.choices[0].message.content
 
     # ---- Post-generation lint: contract violation detector ----
     # When screening returned 0, the body should not contain sentences that

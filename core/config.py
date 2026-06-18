@@ -19,9 +19,18 @@ class Config:
     LENS_API_KEY = os.getenv("LENS_API_KEY", "")          # for patents (later)
 
     # ---- Models ----
+    # ---- API keys ----
+    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+
+    # ---- Models ----
     EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")
-    LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")     # cheap — extraction + screening (high volume)
-    SYNTHESIS_MODEL = os.getenv("SYNTHESIS_MODEL", "gpt-4o")  # stronger — report synthesis only (~12 calls/report)    # cheap + good for reports
+    LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")     # extraction + screening (high volume, OpenAI)
+    # Synthesis: which provider + model writes the final report prose.
+    # SYNTHESIS_PROVIDER = "openai" or "claude"
+    SYNTHESIS_PROVIDER = os.getenv("SYNTHESIS_PROVIDER", "openai")
+    SYNTHESIS_MODEL = os.getenv("SYNTHESIS_MODEL", "gpt-4o-mini")
+    CLAUDE_SYNTHESIS_MODEL = os.getenv("CLAUDE_SYNTHESIS_MODEL", "claude-sonnet-4-6")
+    SYNTHESIS_MAX_TOKENS = int(os.getenv("SYNTHESIS_MAX_TOKENS", "4096"))
 
     # ---- Qdrant (local) ----
     QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
